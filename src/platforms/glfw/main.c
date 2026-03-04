@@ -29,6 +29,7 @@ typedef struct {
     StringBooleanEntry* globalVarsToBeTraced;
     StringBooleanEntry* instanceVarsToBeTraced;
     StringBooleanEntry* functionCallsToBeTraced;
+    StringBooleanEntry* alarmsToBeTraced;
     bool headless;
     bool traceFrames;
     bool printRooms;
@@ -47,6 +48,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"trace-global-vars", required_argument,         nullptr, 't'},
         {"trace-instance-vars", required_argument,         nullptr, 'i'},
         {"trace-function-calls", required_argument,         nullptr, 'c'},
+        {"trace-alarms", required_argument,         nullptr, 'a'},
         {"trace-frames", no_argument, nullptr, 'k'},
         {nullptr,               0,                 nullptr,  0 }
     };
@@ -88,6 +90,9 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
             case 'c':
                 shput(args->functionCallsToBeTraced, optarg, true);
                 break;
+            case 'a':
+                shput(args->alarmsToBeTraced, optarg, true);
+                break;
             case 'k':
                 args->traceFrames = true;
                 break;
@@ -115,6 +120,7 @@ static void freeCommandLineArgs(CommandLineArgs* args) {
     shfree(args->globalVarsToBeTraced);
     shfree(args->instanceVarsToBeTraced);
     shfree(args->functionCallsToBeTraced);
+    shfree(args->alarmsToBeTraced);
 }
 
 // ===[ SCREENSHOT ]===
@@ -198,6 +204,7 @@ int main(int argc, char* argv[]) {
     shcopyFromTo(args.globalVarsToBeTraced, runner->vmContext->globalVarsToBeTraced);
     shcopyFromTo(args.instanceVarsToBeTraced, runner->vmContext->instanceVarsToBeTraced);
     shcopyFromTo(args.functionCallsToBeTraced, runner->vmContext->functionCallsToBeTraced);
+    shcopyFromTo(args.alarmsToBeTraced, runner->vmContext->alarmsToBeTraced);
 
     // Init GLFW
     if (!glfwInit()) {

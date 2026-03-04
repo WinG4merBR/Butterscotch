@@ -1407,6 +1407,7 @@ void VM_free(VMContext* ctx) {
     shfree(ctx->globalVarsToBeTraced);
     shfree(ctx->instanceVarsToBeTraced);
     shfree(ctx->functionCallsToBeTraced);
+    shfree(ctx->alarmsToBeTraced);
     hmfree(ctx->varRefMap);
     hmfree(ctx->funcRefMap);
 

@@ -307,11 +307,23 @@ void Runner_step(Runner* runner) {
     repeat(alarmCount, i) {
         Instance* inst = runner->instances[i];
         if (inst == nullptr || !inst->active) continue;
+
+        GameObject* object = &runner->dataWin->objt.objects[inst->objectIndex];
+
         repeat(GML_ALARM_COUNT, alarmIdx) {
             if (inst->alarm[alarmIdx] > 0) {
+                if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
+                    printf("VM: Ticking down Alarm[%d] for %s (%d), current tick is %d\n", alarmIdx, object->name, inst->instanceId, inst->alarm[alarmIdx]);
+                }
+
                 inst->alarm[alarmIdx]--;
                 if (inst->alarm[alarmIdx] == 0) {
                     inst->alarm[alarmIdx] = -1;
+
+                    if (shgeti(runner->vmContext->alarmsToBeTraced, "*") != -1 || shgeti(runner->vmContext->alarmsToBeTraced, object->name) != -1) {
+                        printf("VM: Firing Alarm[%d] for %s (%d)\n", alarmIdx, object->name, inst->instanceId);
+                    }
+                    
                     Runner_executeEvent(runner, inst, EVENT_ALARM, alarmIdx);
                 }
             }
