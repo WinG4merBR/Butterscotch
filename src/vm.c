@@ -223,6 +223,26 @@ static void arrayMapSet(ArrayMapEntry** map, int32_t varID, int32_t arrayIndex, 
     hmput(*map, k, val);
 }
 
+// ===[ Array Alias Resolution ]===
+
+#define MAX_ARRAY_ALIAS_HOPS 16
+
+// Follows RVALUE_ARRAY_REF chain in scalar variable slots to find the actual source varID.
+// Returns the resolved varID (which may be the same as the input if no alias exists).
+static int32_t resolveArrayAlias(RValue* vars, uint32_t varCount, int32_t varID) {
+    int32_t current = varID;
+    int hops = 0;
+    while (varCount > (uint32_t) current && vars[current].type == RVALUE_ARRAY_REF) {
+        current = vars[current].int32;
+        hops++;
+        if (hops >= MAX_ARRAY_ALIAS_HOPS) {
+            fprintf(stderr, "VM: resolveArrayAlias exceeded %d hops starting from varID %d (circular alias chain?)\n", MAX_ARRAY_ALIAS_HOPS, varID);
+            abort();
+        }
+    }
+    return current;
+}
+
 // ===[ Trace Helpers ]===
 
 /**
@@ -356,7 +376,8 @@ static RValue resolveVariableRead(VMContext* ctx, int16_t instanceType, uint32_t
             case INSTANCE_LOCAL:
                 return arrayMapGet(ctx->localArrayMap, varDef->varID, access.arrayIndex);
             case INSTANCE_GLOBAL: {
-                RValue result = arrayMapGet(ctx->globalArrayMap, varDef->varID, access.arrayIndex);
+                int32_t resolvedVarID = resolveArrayAlias(ctx->globalVars, ctx->globalVarCount, varDef->varID);
+                RValue result = arrayMapGet(ctx->globalArrayMap, resolvedVarID, access.arrayIndex);
                 if (shouldTraceVariable(ctx->varReadsToBeTraced, "global", nullptr, varDef->name)) {
                     char* rvalueAsString = RValue_toString(result);
                     if (access.hasInstanceType && originalInstanceType != instanceType) {
@@ -372,7 +393,8 @@ static RValue resolveVariableRead(VMContext* ctx, int16_t instanceType, uint32_t
             default: {
                 Instance* inst = targetInstance;
                 if (inst != nullptr) {
-                    RValue result = arrayMapGet(inst->selfArrayMap, varDef->varID, access.arrayIndex);
+                    int32_t resolvedVarID = resolveArrayAlias(inst->selfVars, inst->selfVarCount, varDef->varID);
+                    RValue result = arrayMapGet(inst->selfArrayMap, resolvedVarID, access.arrayIndex);
                     if (shouldTraceVariable(ctx->varReadsToBeTraced, ctx->dataWin->objt.objects[inst->objectIndex].name, "self", varDef->name)) {
                         char* rvalueAsString = RValue_toString(result);
                         if (access.hasInstanceType && originalInstanceType != instanceType) {
@@ -398,16 +420,36 @@ static RValue resolveVariableRead(VMContext* ctx, int16_t instanceType, uint32_t
             break;
         case INSTANCE_GLOBAL:
             require(ctx->globalVarCount > (uint32_t) varDef->varID);
-            result = ctx->globalVars[varDef->varID];
+            // If the scalar slot already has an array ref, return it as-is
+            if (ctx->globalVars[varDef->varID].type == RVALUE_ARRAY_REF) {
+                result = ctx->globalVars[varDef->varID];
+            } else if (hmgeti(ctx->globalArrayVarTracker, varDef->varID) >= 0) {
+                // Variable has array data but scalar slot is uninitialized - return a self-ref
+                result = RValue_makeArrayRef(varDef->varID);
+            } else {
+                result = ctx->globalVars[varDef->varID];
+            }
             break;
         case INSTANCE_SELF:
             require(ctx->selfVarCount > (uint32_t) varDef->varID);
-            result = ctx->selfVars[varDef->varID];
+            if (targetInstance != nullptr && targetInstance->selfVars[varDef->varID].type == RVALUE_ARRAY_REF) {
+                result = targetInstance->selfVars[varDef->varID];
+            } else if (targetInstance != nullptr && hmgeti(targetInstance->selfArrayVarTracker, varDef->varID) >= 0) {
+                result = RValue_makeArrayRef(varDef->varID);
+            } else {
+                result = ctx->selfVars[varDef->varID];
+            }
             break;
         default: {
             // Positive instanceType (object reference) - use target instance's selfVars
             require(targetInstance->selfVarCount > (uint32_t) varDef->varID);
-            result = targetInstance->selfVars[varDef->varID];
+            if (targetInstance->selfVars[varDef->varID].type == RVALUE_ARRAY_REF) {
+                result = targetInstance->selfVars[varDef->varID];
+            } else if (hmgeti(targetInstance->selfArrayVarTracker, varDef->varID) >= 0) {
+                result = RValue_makeArrayRef(varDef->varID);
+            } else {
+                result = targetInstance->selfVars[varDef->varID];
+            }
             break;
         }
     }
@@ -470,8 +512,10 @@ static void resolveVariableWrite(VMContext* ctx, int16_t instanceType, uint32_t 
             case INSTANCE_LOCAL:
                 arrayMapSet(&ctx->localArrayMap, varDef->varID, access.arrayIndex, val);
                 return;
-            case INSTANCE_GLOBAL:
-                arrayMapSet(&ctx->globalArrayMap, varDef->varID, access.arrayIndex, val);
+            case INSTANCE_GLOBAL: {
+                int32_t resolvedVarID = resolveArrayAlias(ctx->globalVars, ctx->globalVarCount, varDef->varID);
+                arrayMapSet(&ctx->globalArrayMap, resolvedVarID, access.arrayIndex, val);
+                hmput(ctx->globalArrayVarTracker, resolvedVarID, 1);
                 if (shouldTraceVariable(ctx->varWritesToBeTraced, "global", nullptr, varDef->name)) {
                     char* rvalueAsString = RValue_toString(val);
                     if (access.hasInstanceType && originalInstanceType != instanceType) {
@@ -482,11 +526,14 @@ static void resolveVariableWrite(VMContext* ctx, int16_t instanceType, uint32_t 
                     free(rvalueAsString);
                 }
                 return;
+            }
             case INSTANCE_SELF:
             default: {
                 Instance* inst = targetInstance;
                 if (inst != nullptr) {
-                    arrayMapSet(&inst->selfArrayMap, varDef->varID, access.arrayIndex, val);
+                    int32_t resolvedVarID = resolveArrayAlias(inst->selfVars, inst->selfVarCount, varDef->varID);
+                    arrayMapSet(&inst->selfArrayMap, resolvedVarID, access.arrayIndex, val);
+                    hmput(inst->selfArrayVarTracker, resolvedVarID, 1);
                     if (shouldTraceVariable(ctx->varWritesToBeTraced, ctx->dataWin->objt.objects[inst->objectIndex].name, "self", varDef->name)) {
                         char* rvalueAsString = RValue_toString(val);
                         if (access.hasInstanceType && originalInstanceType != instanceType) {
@@ -643,7 +690,8 @@ static void handlePushScoped(VMContext* ctx, uint32_t instr, const uint8_t* extr
     ArrayAccess access = popArrayAccess(ctx, varRef);
     RValue val;
     if (access.isArray) {
-        val = arrayMapGet(variableMap, varDef->varID, access.arrayIndex);
+        int32_t resolvedVarID = resolveArrayAlias(variables, count, varDef->varID);
+        val = arrayMapGet(variableMap, resolvedVarID, access.arrayIndex);
         if (shouldTraceVariable(traceMap, scopeName, altScopeName, varDef->name)) {
             char* rvalueAsString = RValue_toString(val);
             printf("VM: [%s] READ %s.%s[%d] -> %s\n", ctx->currentCodeName, scopeName, varDef->name, access.arrayIndex, rvalueAsString);
@@ -728,8 +776,10 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
                 case INSTANCE_LOCAL:
                     arrayMapSet(&ctx->localArrayMap, varDef->varID, arrayIndex, val);
                     break;
-                case INSTANCE_GLOBAL:
-                    arrayMapSet(&ctx->globalArrayMap, varDef->varID, arrayIndex, val);
+                case INSTANCE_GLOBAL: {
+                    int32_t resolvedVarID = resolveArrayAlias(ctx->globalVars, ctx->globalVarCount, varDef->varID);
+                    arrayMapSet(&ctx->globalArrayMap, resolvedVarID, arrayIndex, val);
+                    hmput(ctx->globalArrayVarTracker, resolvedVarID, 1);
                     if (shouldTraceVariable(ctx->varWritesToBeTraced, "global", nullptr, varDef->name)) {
                         char* rvalueAsString = RValue_toString(val);
                         if (originalInstanceType != instanceType) {
@@ -740,11 +790,14 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
                         free(rvalueAsString);
                     }
                     break;
+                }
                 case INSTANCE_SELF:
                 default: {
                     struct Instance* inst = (struct Instance*) ctx->currentInstance;
                     if (inst != nullptr) {
-                        arrayMapSet(&inst->selfArrayMap, varDef->varID, arrayIndex, val);
+                        int32_t resolvedVarID = resolveArrayAlias(inst->selfVars, inst->selfVarCount, varDef->varID);
+                        arrayMapSet(&inst->selfArrayMap, resolvedVarID, arrayIndex, val);
+                        hmput(inst->selfArrayVarTracker, resolvedVarID, 1);
                         if (shouldTraceVariable(ctx->varWritesToBeTraced, ctx->dataWin->objt.objects[inst->objectIndex].name, "self", varDef->name)) {
                             char* rvalueAsString = RValue_toString(val);
                             if (originalInstanceType != instanceType) {
@@ -1599,6 +1652,7 @@ VMContext* VM_create(DataWin* dataWin) {
 
     ctx->globalArrayMap = nullptr;
     ctx->localArrayMap = nullptr;
+    ctx->globalArrayVarTracker = nullptr;
 
     // Build globalVarNameMap: varName -> varID for global variables
     ctx->globalVarNameMap = nullptr;
@@ -1812,6 +1866,9 @@ void VM_free(VMContext* ctx) {
 
     RValue_freeAllRValuesInMap(ctx->localArrayMap);
     hmfree(ctx->localArrayMap);
+
+    // Free array var trackers
+    hmfree(ctx->globalArrayVarTracker);
 
     // Free hash maps
     shfree(ctx->funcMap);

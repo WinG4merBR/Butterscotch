@@ -15,6 +15,7 @@ typedef struct Instance {
     RValue* selfVars;
     uint32_t selfVarCount;
     ArrayMapEntry* selfArrayMap;
+    struct { int32_t key; int32_t value; }* selfArrayVarTracker; // tracks which varIDs have array data
 
     // Built-in instance properties
     int32_t spriteIndex;

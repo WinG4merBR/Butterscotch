@@ -664,6 +664,12 @@ static void writeRValueJson(JsonWriter* w, RValue val) {
         case RVALUE_UNDEFINED:
             JsonWriter_null(w);
             break;
+        case RVALUE_ARRAY_REF: {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "<array_ref:%d>", val.int32);
+            JsonWriter_string(w, buf);
+            break;
+        }
     }
 }
 

@@ -15,6 +15,7 @@ typedef enum {
     RVALUE_INT64 = 3,
     RVALUE_BOOL = 4,
     RVALUE_UNDEFINED = 5,
+    RVALUE_ARRAY_REF = 6,
 } RValueType;
 
 typedef struct {
@@ -56,6 +57,12 @@ static RValue RValue_makeUndefined(void) {
     return (RValue){ .type = RVALUE_UNDEFINED };
 }
 
+// Creates an array reference that aliases another variable's array data.
+// The sourceVarID identifies which variable's array map to use for reads/writes.
+static RValue RValue_makeArrayRef(int32_t sourceVarID) {
+    return (RValue){ .int32 = sourceVarID, .type = RVALUE_ARRAY_REF };
+}
+
 // Converts an RValue to a heap-allocated string representation.
 // The caller must free the returned string
 static char* RValue_toString(RValue val) {
@@ -76,6 +83,9 @@ static char* RValue_toString(RValue val) {
             return strdup(val.int32 ? "1" : "0");
         case RVALUE_UNDEFINED:
             return strdup("undefined");
+        case RVALUE_ARRAY_REF:
+            snprintf(buf, sizeof(buf), "<array_ref:%d>", val.int32);
+            return strdup(buf);
     }
     return strdup("");
 }
@@ -117,6 +127,7 @@ static double RValue_toReal(RValue val) {
         case RVALUE_INT64:  return (double) val.int64;
         case RVALUE_BOOL:   return (double) val.int32;
         case RVALUE_STRING: return strtod(val.string, nullptr);
+        case RVALUE_ARRAY_REF: return 0.0;
         default:            return 0.0;
     }
 }
@@ -128,6 +139,7 @@ static int32_t RValue_toInt32(RValue val) {
         case RVALUE_INT64:  return (int32_t) val.int64;
         case RVALUE_BOOL:   return val.int32;
         case RVALUE_STRING: return (int32_t) strtod(val.string, nullptr);
+        case RVALUE_ARRAY_REF: return 0;
         default:            return 0;
     }
 }
@@ -139,6 +151,7 @@ static int64_t RValue_toInt64(RValue val) {
         case RVALUE_INT64:  return val.int64;
         case RVALUE_BOOL:   return (int64_t) val.int32;
         case RVALUE_STRING: return (int64_t) strtod(val.string, nullptr);
+        case RVALUE_ARRAY_REF: return 0;
         default:            return 0;
     }
 }
@@ -150,6 +163,7 @@ static bool RValue_toBool(RValue val) {
         case RVALUE_INT64:  return val.int64 > 0;
         case RVALUE_BOOL:   return val.int32 != 0;
         case RVALUE_STRING: return val.string != nullptr && val.string[0] != '\0';
+        case RVALUE_ARRAY_REF: return false;
         default:            return false;
     }
 }

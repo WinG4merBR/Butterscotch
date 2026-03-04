@@ -132,6 +132,8 @@ typedef struct VMContext {
     // Array variable maps: key = ((int64_t)varID << 32) | (uint32_t)arrayIndex
     ArrayMapEntry* globalArrayMap;
     ArrayMapEntry* localArrayMap;
+    // Tracks which global varIDs have array data (for array aliasing)
+    struct { int32_t key; int32_t value; }* globalArrayVarTracker;
     RValue* scriptArgs;       // Arguments passed to current script (nullptr for non-script code)
     int32_t scriptArgCount;   // Number of arguments passed
     // funcName -> codeIndex hash map (stb_ds)

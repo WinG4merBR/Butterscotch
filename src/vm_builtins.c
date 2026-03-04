@@ -324,10 +324,12 @@ static RValue builtinShowDebugMessage([[maybe_unused]] VMContext* ctx, RValue* a
 }
 
 static RValue builtinStringLength([[maybe_unused]] VMContext* ctx, RValue* args, int32_t argCount) {
-    if (1 > argCount || args[0].type != RVALUE_STRING) {
-        return RValue_makeInt32(0);
-    }
-    return RValue_makeInt32((int32_t) strlen(args[0].string));
+    if (1 > argCount) return RValue_makeInt32(0);
+    // GML converts non-string arguments to string before measuring length
+    char* str = RValue_toString(args[0]);
+    int32_t len = (int32_t) strlen(str);
+    free(str);
+    return RValue_makeInt32(len);
 }
 
 static RValue builtinReal([[maybe_unused]] VMContext* ctx, RValue* args, int32_t argCount) {

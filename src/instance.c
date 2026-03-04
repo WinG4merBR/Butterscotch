@@ -26,6 +26,7 @@ Instance* Instance_create(uint32_t instanceId, int32_t objectIndex, double x, do
     inst->imageBlend = 0xFFFFFF;
     inst->depth = 0;
     inst->selfArrayMap = nullptr;
+    inst->selfArrayVarTracker = nullptr;
 
     // Initialize alarms to -1 (inactive)
     repeat(GML_ALARM_COUNT, i) {
@@ -62,6 +63,9 @@ void Instance_free(Instance* instance) {
         RValue_free(&instance->selfArrayMap[i].value);
     }
     hmfree(instance->selfArrayMap);
+
+    // Free selfArrayVarTracker
+    hmfree(instance->selfArrayVarTracker);
 
     free(instance);
 }
