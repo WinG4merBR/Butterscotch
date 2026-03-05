@@ -378,15 +378,20 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
             }
             return RValue_makeReal(0.0);
         }
+    } else if (instanceType == INSTANCE_OTHER) {
+        if (ctx->otherInstance != nullptr) {
+            targetInstance = (Instance*) ctx->otherInstance;
+        }
     }
 
     // Check for built-in variable (varID == -6 sentinel)
     if (varDef->varID == -6) {
         // For object/instance references, temporarily swap currentInstance so VMBuiltins reads the correct instance
         Instance* savedInstance = (Instance*) ctx->currentInstance;
-        if (instanceType >= 0) ctx->currentInstance = targetInstance;
+        bool needsInstanceSwap = (instanceType >= 0) || (instanceType == INSTANCE_OTHER);
+        if (needsInstanceSwap) ctx->currentInstance = targetInstance;
         RValue result = VMBuiltins_getVariable(ctx, varDef->name, access.arrayIndex);
-        if (instanceType >= 0) ctx->currentInstance = savedInstance;
+        if (needsInstanceSwap) ctx->currentInstance = savedInstance;
         return result;
     }
 
@@ -579,15 +584,20 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
             free(valAsString);
             return;
         }
+    } else if (instanceType == INSTANCE_OTHER) {
+        if (ctx->otherInstance != nullptr) {
+            targetInstance = (Instance*) ctx->otherInstance;
+        }
     }
 
     // Check for built-in variable (varID == -6 sentinel)
     if (varDef->varID == -6) {
         // For object/instance references, temporarily swap currentInstance so VMBuiltins writes the correct instance
         Instance* savedInstance = (Instance*) ctx->currentInstance;
-        if (instanceType >= 0) ctx->currentInstance = targetInstance;
+        bool needsInstanceSwap = (instanceType >= 0) || (instanceType == INSTANCE_OTHER);
+        if (needsInstanceSwap) ctx->currentInstance = targetInstance;
         VMBuiltins_setVariable(ctx, varDef->name, val, access.arrayIndex);
-        if (instanceType >= 0) ctx->currentInstance = savedInstance;
+        if (needsInstanceSwap) ctx->currentInstance = savedInstance;
         return;
     }
 
