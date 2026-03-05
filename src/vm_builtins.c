@@ -2121,7 +2121,8 @@ static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCoun
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
         if (notme && inst == self) continue;
-        if (!VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+
+        if (!Collision_matchesTarget(ctx->dataWin, inst, targetObjIndex)) continue;
 
         InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
         if (!bbox.valid) continue;
@@ -2236,7 +2237,8 @@ static RValue builtinCollisionRectangle(VMContext* ctx, RValue* args, int32_t ar
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
         if (notme && inst == self) continue;
-        if (!VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+
+        if (!Collision_matchesTarget(ctx->dataWin, inst, targetObjIndex)) continue;
 
         InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
         if (!bbox.valid) continue;
@@ -2297,7 +2299,8 @@ static RValue builtinCollisionPoint(VMContext* ctx, RValue* args, int32_t argCou
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
         if (notme && inst == self) continue;
-        if (!VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+
+        if (!Collision_matchesTarget(ctx->dataWin, inst, targetObjIndex)) continue;
 
         InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
         if (!bbox.valid) continue;
@@ -2335,7 +2338,8 @@ static RValue builtinInstancePosition(VMContext* ctx, RValue* args, int32_t argC
     repeat(count, i) {
         Instance* inst = runner->instances[i];
         if (!inst->active) continue;
-        if (!VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+
+        if (!Collision_matchesTarget(ctx->dataWin, inst, targetObjIndex)) continue;
 
         InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
         if (!bbox.valid) continue;
