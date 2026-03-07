@@ -559,6 +559,14 @@ int main(int argc, char* argv[]) {
 
                 free(json);
             }
+
+            // Reset global interact state because I HATE when I get stuck while moving through rooms
+            if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F10)) {
+                int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");
+
+                runner->vmContext->globalVars[interactVarId] = RValue_makeInt32(0);
+                printf("Changed global.interact [%d] value!\n", interactVarId);
+            }
         }
 
         // Run the game step if the game is paused
