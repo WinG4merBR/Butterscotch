@@ -1076,21 +1076,31 @@ static void handleAdd(VMContext* ctx) {
         RValue_free(&a);
         RValue_free(&b);
         stackPush(ctx,RValue_makeOwnedString(result));
+    } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
+        stackPush(ctx, RValue_makeInt32(a.int32 + b.int32));
+    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+        stackPush(ctx, RValue_makeInt64(a.int64 + b.int64));
     } else {
         double result = RValue_toReal(a) + RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx,RValue_makeReal(result));
+        stackPush(ctx, RValue_makeReal(result));
     }
 }
 
 static void handleSub(VMContext* ctx) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
-    double result = RValue_toReal(a) - RValue_toReal(b);
-    RValue_free(&a);
-    RValue_free(&b);
-    stackPush(ctx,RValue_makeReal(result));
+    if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
+        stackPush(ctx, RValue_makeInt32(a.int32 - b.int32));
+    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+        stackPush(ctx, RValue_makeInt64(a.int64 - b.int64));
+    } else {
+        double result = RValue_toReal(a) - RValue_toReal(b);
+        RValue_free(&a);
+        RValue_free(&b);
+        stackPush(ctx, RValue_makeReal(result));
+    }
 }
 
 static void handleMul(VMContext* ctx) {
@@ -1116,11 +1126,15 @@ static void handleMul(VMContext* ctx) {
             RValue_free(&b);
             stackPush(ctx,RValue_makeOwnedString(result));
         }
+    } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
+        stackPush(ctx, RValue_makeInt32(a.int32 * b.int32));
+    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+        stackPush(ctx, RValue_makeInt64(a.int64 * b.int64));
     } else {
         double result = RValue_toReal(a) * RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx,RValue_makeReal(result));
+        stackPush(ctx, RValue_makeReal(result));
     }
 }
 
