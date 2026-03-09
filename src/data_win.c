@@ -182,7 +182,7 @@ PathPositionResult GamePath_getPosition(GamePath* path, double t) {
     // Get the right interval via linear scan
     double l = path->length * t;
     uint32_t pos = 0;
-    while (pos < path->internalPointCount - 2 && l >= path->internalPoints[pos + 1].l) {
+    while (path->internalPointCount - 2 > pos && l >= path->internalPoints[pos + 1].l) {
         pos++;
     }
 
@@ -1203,7 +1203,7 @@ static void parseTXTR(BinaryReader* reader, DataWin* dw, size_t chunkEnd) {
             t->textures[i].blobSize = 0; // external texture
             continue;
         }
-        if (i + 1 < count && t->textures[i + 1].blobOffset != 0) {
+        if (count > i + 1 && t->textures[i + 1].blobOffset != 0) {
             t->textures[i].blobSize = t->textures[i + 1].blobOffset - t->textures[i].blobOffset;
         } else {
             t->textures[i].blobSize = (uint32_t)(chunkEnd - t->textures[i].blobOffset);
@@ -1281,8 +1281,8 @@ DataWin* DataWin_parse(const char* filePath) {
     (void)formEnd;
 
     // Chunk dispatch loop
-    while (reader.position < (size_t)fileSize) {
-        if (reader.position + 8 > (size_t)fileSize) break;
+    while ((size_t) fileSize > reader.position) {
+        if (reader.position + 8 > (size_t) fileSize) break;
 
         char chunkName[5] = {0};
         BinaryReader_readBytes(&reader, chunkName, 4);
