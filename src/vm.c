@@ -2007,10 +2007,6 @@ CodeLocals* VM_resolveCodeLocals(VMContext* ctx, const char* codeName) {
 RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t argCount) {
     require(codeIndex >= 0 && ctx->dataWin->code.count > (uint32_t) codeIndex);
     CodeEntry* code = &ctx->dataWin->code.entries[codeIndex];
-    if (strstr(code->name, "INSTAWRITER") != nullptr || strstr(code->name, "OBJ_WRITER_Create") != nullptr) {
-        Instance* inst = (Instance*) ctx->currentInstance;
-        fprintf(stderr, "DEBUG VM_callCodeIndex: %s (codeIndex=%d, instId=%d)\n", code->name, codeIndex, inst ? inst->instanceId : -1);
-    }
 
     // Save current frame
     CallFrame* frame = safeMalloc(sizeof(CallFrame));
