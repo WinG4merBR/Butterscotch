@@ -459,7 +459,8 @@ static void parseAGRP(BinaryReader* reader, DataWin* dw) {
 
 static void parseSPRT(BinaryReader* reader, DataWin* dw, bool skipLoadingPreciseMasksForNonPreciseSprites) {
     Sprt* s = &dw->sprt;
-
+    int sequenceOffset = 0;
+    int nineSliceOffset = 0;
     uint32_t count;
     uint32_t* ptrs = readPointerTable(reader, &count);
     s->count = count;
@@ -488,12 +489,27 @@ static void parseSPRT(BinaryReader* reader, DataWin* dw, bool skipLoadingPrecise
         // Detect special type vs normal: peek next int32
         int32_t check = BinaryReader_readInt32(reader);
         if (check == -1) {
-            fprintf(stderr, "SPRT: unexpected special type sprite '%s' (GMS2 format not supported)\n", spr->name ? spr->name : "?");
-            exit(1);
+            spr->specialType = true;
+            spr->sVersion = BinaryReader_readUint32(reader);
+            spr->sSpriteType = BinaryReader_readUint32(reader);
+            if(dw->gen8.major >= 2)
+            {
+                spr->gms2PlaybackSpeed = BinaryReader_readFloat32(reader);
+                spr->gms2PlaybackSpeedType = BinaryReader_readUint32(reader);
+                if(spr->sVersion >= 2)
+                {
+                    sequenceOffset = BinaryReader_readUint32(reader);
+                    if(spr->sVersion >= 3)
+                    {
+                        nineSliceOffset = BinaryReader_readUint32(reader);
+                    }
+                }
+                
+            }
         }
 
-        // 'check' is the texture count (start of SimpleList)
-        spr->textureCount = (uint32_t)check;
+        // 'check' is the texture count not -1 (start of SimpleList)
+        spr->textureCount = (dw->gen8.major == 1 && check != -1) ? (uint32_t)check : BinaryReader_readUint32(reader);
         if (spr->textureCount > 0) {
             spr->textureOffsets = safeMalloc(spr->textureCount * sizeof(uint32_t));
             repeat(spr->textureCount, j) {

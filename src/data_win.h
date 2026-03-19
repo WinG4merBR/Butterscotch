@@ -189,6 +189,11 @@ typedef struct {
     uint32_t sepMasks;
     int32_t originX;
     int32_t originY;
+    uint32_t sVersion;
+    uint32_t sSpriteType;
+    float gms2PlaybackSpeed;
+    bool gms2PlaybackSpeedType;
+    bool specialType;
     uint32_t textureCount;
     uint32_t* textureOffsets; // absolute file offsets to TexturePageItems
     uint32_t maskCount;       // number of collision masks (one per frame, or 0)
