@@ -18,6 +18,7 @@
 #include "../data_win.h"
 #include "../json_reader.h"
 #include "ps2_file_system.h"
+#include "ps2_audio_system.h"
 #include "gs_renderer.h"
 #include "ps2_utils.h"
 #include "utils.h"
@@ -31,6 +32,10 @@ extern unsigned char mcserv_irx[];
 extern unsigned int size_mcserv_irx;
 extern unsigned char padman_irx[];
 extern unsigned int size_padman_irx;
+extern unsigned char freesd_irx[];
+extern unsigned int size_freesd_irx;
+extern unsigned char audsrv_irx[];
+extern unsigned int size_audsrv_irx;
 
 // The maximum memory of a normal PS2 console
 // Developer consoles may have more memory, but because ps2sdk does not have a way to know
@@ -315,6 +320,16 @@ int main(int argc, char* argv[]) {
     padInit(0);
     padPortOpen(0, 0, padBuf);
 
+    // ===[ Load Audio IOP Modules ]===
+    ret = SifExecModuleBuffer(freesd_irx, size_freesd_irx, 0, nullptr, nullptr);
+    if (0 > ret) {
+        printf("Failed to load freesd: %d\n", ret);
+    }
+    ret = SifExecModuleBuffer(audsrv_irx, size_audsrv_irx, 0, nullptr, nullptr);
+    if (0 > ret) {
+        printf("Failed to load audsrv: %d\n", ret);
+    }
+
     // Wait for pad to be ready
     drawStatusScreen(gsGlobal, gsFontM, nullptr, "Waiting for controller...", nullptr);
 
@@ -436,6 +451,13 @@ int main(int argc, char* argv[]) {
 
     runner->renderer = renderer;
 
+    // ===[ Initialize Audio System ]===
+    drawStatusScreen(gsGlobal, gsFontM, dataWin->gen8.displayName, "Initializing audio...", &loadingState);
+    Ps2AudioSystem* ps2Audio = Ps2AudioSystem_create();
+    AudioSystem* audioSystem = (AudioSystem*) ps2Audio;
+    audioSystem->vtable->init(audioSystem, dataWin, fileSystem);
+    runner->audioSystem = audioSystem;
+
     drawStatusScreen(gsGlobal, gsFontM, dataWin->gen8.displayName, "Initializing renderer...", &loadingState);
     renderer->vtable->init(renderer, dataWin);
 
@@ -518,7 +540,7 @@ int main(int argc, char* argv[]) {
         if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEDOWN)) {
             DataWin* dw = runner->dataWin;
             forEachIndexed(Room, room, i, dw->room.rooms, dw->room.count) {
-                if (strcmp(room->name, "room_castle_barrier") == 0) {
+                if (strcmp(room->name, "room_asrielappears") == 0) {
                     runner->pendingRoom = i;
                     break;
                 }
@@ -562,6 +584,14 @@ int main(int argc, char* argv[]) {
             Runner_step(runner);
             accumulator -= targetFrameTime;
             gameFramesRan++;
+        }
+
+        // Update audio system (gain fading, stream to audsrv)
+        if (runner->audioSystem != nullptr) {
+            float dt = (float) deltaTime;
+            if (0.0f > dt) dt = 0.0f;
+            if (dt > 0.1f) dt = 0.1f;
+            runner->audioSystem->vtable->update(runner->audioSystem, dt);
         }
 
         // Update FPS counter (counts actual rendered frames, not game logic steps)
@@ -673,6 +703,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (runner->audioSystem != nullptr) {
+        runner->audioSystem->vtable->destroy(runner->audioSystem);
+        runner->audioSystem = nullptr;
+    }
     renderer->vtable->destroy(renderer);
     DataWin_free(dataWin);
 
