@@ -487,16 +487,16 @@ static void maSetMasterGain(AudioSystem* audio, float gain) {
     ma_engine_set_volume(&ma->engine, gain);
 }
 
-static void maSetChannelCount([[maybe_unused]] AudioSystem* audio, [[maybe_unused]] int32_t count) {
+static void maSetChannelCount(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t count) {
     // miniaudio handles channel management internally, this is a no-op
 }
 
-static void maGroupLoad([[maybe_unused]] AudioSystem* audio, [[maybe_unused]] int32_t groupIndex) {
+static void maGroupLoad(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t groupIndex) {
     // Group 0 is already loaded (AUDO chunk), external sounds are loaded on demand
     // Full audiogroup*.dat parsing can be added later if needed
 }
 
-static bool maGroupIsLoaded([[maybe_unused]] AudioSystem* audio, [[maybe_unused]] int32_t groupIndex) {
+static bool maGroupIsLoaded(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t groupIndex) {
     // Always report loaded -- group 0 is embedded, external files load on demand
     return true;
 }
