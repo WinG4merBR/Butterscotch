@@ -259,7 +259,7 @@ static void parseGEN8(BinaryReader* reader, DataWin* dw) {
     if(g->major >= 2)
     {
         BinaryReader_skip(reader, 8); // firstRandom (int64)
-        BinaryReader_skip(reader, 8*4); // 4 Random Entries (int64 or 2 int32)
+        BinaryReader_skip(reader, 8*4); // 4 Random Entries (one int64 or two int32)
 
         g->gms2FPS = BinaryReader_readFloat32(reader);
         BinaryReader_skip(reader, 4); // AllowStatistics (bool32)
@@ -1609,7 +1609,7 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
         chunkIndex++;
     }
 
-     // GMS2: apply default FPS to rooms with speed=0
+    // GMS2: apply default FPS to rooms with speed=0
     printf("gen8: gms2FPS = %f\n", dw->gen8.gms2FPS);
     if (dw->gen8.gms2FPS > 0) {
         repeat(dw->room.count, i) {

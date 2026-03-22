@@ -565,6 +565,7 @@ int main(int argc, char* argv[]) {
                 if ((int32_t) dw->gen8.roomOrderCount > runner->currentRoomOrderPosition + 1) {
                     int32_t nextIdx = dw->gen8.roomOrder[runner->currentRoomOrderPosition + 1];
                     runner->pendingRoom = nextIdx;
+                    runner->audioSystem->vtable->stopAll(runner->audioSystem);
                     fprintf(stderr, "Debug: Going to next room -> %s\n", dw->room.rooms[nextIdx].name);
                 }
             }

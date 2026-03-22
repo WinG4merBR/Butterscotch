@@ -4013,5 +4013,5 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("action_set_alarm", builtinActionSetAlarm);
     registerBuiltin("string_hash_to_newline", builtinStringHashToNewline);
     registerBuiltin("json_decode", builtinJsonDecode);
-    registerBuiltin("builtin_font_add_sprite_ext", builtin_font_add_sprite_ext);
+    registerBuiltin("font_add_sprite_ext", builtin_font_add_sprite_ext);
 }
