@@ -142,13 +142,12 @@ elseif(PLATFORM STREQUAL "ps2")
 elseif(PLATFORM STREQUAL "ps3")
   if (PS3)
     set_target_properties(butterscotch PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
-    # === Paths do toolchain e PSL1GHT ===
+
     set(CMAKE_C_COMPILER ${PS3DEV}/ppu/bin/ppu-gcc)
     set(CMAKE_CXX_COMPILER ${PS3DEV}/ppu/bin/ppu-g++)
     set(PS3DEV "/usr/local/ps3dev" CACHE PATH "PS3Dev toolchain path")
     set(PSL1GHT "$ENV{HOME}/PSL1GHT/build" CACHE PATH "PSL1GHT build path")
 
-    # === Compilador e flags específicos PS3 ===
     target_compile_options(butterscotch PRIVATE
         -O2
         -mcpu=cell
@@ -165,7 +164,6 @@ elseif(PLATFORM STREQUAL "ps3")
         C_STANDARD 11
     )
 
-    # === Bibliotecas PSL1GHT / PS3DEV ===
     target_link_libraries(butterscotch PRIVATE
         ${PSL1GHT}/ppu/lib/libgcm_sys.a
         ${PSL1GHT}/ppu/lib/librsx.a
@@ -212,40 +210,30 @@ elseif(PLATFORM STREQUAL "ps3")
         ${PS3DEV}/portlibs/ppu/lib
     )
 
-    # === Macros e defines específicos PS3 ===
     target_compile_definitions(butterscotch PRIVATE
         __PPU__
         __PS3__
         __CELLOS_LV2__
     )
 
-    # === Pós-processamento PS3 (SELF e SFO) ===
-
-    # Definição de diretórios de saída (seguindo a estrutura do seu script)
     set(PKG_DIR "${CMAKE_SOURCE_DIR}/PS3_PKG")
     set(METADATA_DIR "${CMAKE_SOURCE_DIR}/sfo")
     set(EBOOT_OUT "${PKG_DIR}/USRDIR/EBOOT.BIN")
 
-    # 1. Verificar o ELF (apenas log no terminal durante o build)
     add_custom_command(TARGET butterscotch POST_BUILD
         COMMAND ppu-readelf -h butterscotch > /dev/null 
         COMMAND fself butterscotch butterscotch.self
         COMMENT "Verificando cabeçalho ELF e gerando SELF para o PS3"
     )
 
-    # 2. Gerar o EBOOT.BIN (Strip -> Sprxlinker -> Fself)
     add_custom_command(TARGET butterscotch POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PKG_DIR}/USRDIR"
-        # Strip para reduzir tamanho
         COMMAND ppu-strip $<TARGET_FILE:butterscotch> -o $<TARGET_FILE:butterscotch>_stripped
-        # Linkagem de SPRX (se necessário pelo seu toolchain)
         COMMAND sprxlinker $<TARGET_FILE:butterscotch>_stripped
-        # Assinatura Fake SELF
         COMMAND fself $<TARGET_FILE:butterscotch>_stripped ${EBOOT_OUT}
         COMMENT "Gerando EBOOT.BIN assinado"
     )
 
-    # 3. Gerar o PARAM.SFO
     add_custom_command(TARGET butterscotch POST_BUILD
         COMMAND sfo.py --fromxml "${METADATA_DIR}/sfo.xml" "${PKG_DIR}/PARAM.SFO"
         COMMENT "Gerando PARAM.SFO a partir do XML"
