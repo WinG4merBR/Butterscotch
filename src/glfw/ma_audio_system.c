@@ -164,13 +164,13 @@ static int32_t maPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prior
 
     if (isEmbedded) {
         // Embedded audio: decode from AUDO chunk memory
-        if (0 > sound->audioFile || (uint32_t) sound->audioFile >= dw->audo.count) {
+        if (0 > sound->audioFile || (uint32_t) sound->audioFile >= ma->base.audioGroups[sound->audioGroup]->audo.count) {
             fprintf(stderr, "Audio: Invalid audio file index %d for sound '%s'\n", sound->audioFile, sound->name);
             return -1;
         }
 
-        AudioEntry* entry = &dw->audo.entries[sound->audioFile];
-
+        AudioEntry* entry = &ma->base.audioGroups[sound->audioGroup]->audo.entries[sound->audioFile];
+  
         ma_decoder_config decoderConfig = ma_decoder_config_init_default();
         result = ma_decoder_init_memory(entry->data, entry->dataSize, &decoderConfig, &slot->decoder);
         if (result != MA_SUCCESS) {
