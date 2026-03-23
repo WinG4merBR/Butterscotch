@@ -1215,7 +1215,7 @@ static RValue builtinCameraGetViewHeight(VMContext* ctx, RValue* args, int32_t a
 
 static RValue builtinCameraSetViewPos(VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(-1);
-    Runner* runner = requireNotNullMessage(ctx->runner, "VM: camera_get_view_height called but no runner!");
+    Runner* runner = requireNotNullMessage(ctx->runner, "VM: camera_set_view_pos called but no runner!");
     int32_t cameraId = RValue_toInt32(args[0]);
     int32_t x = RValue_toInt32(args[1]);
     int32_t y = RValue_toInt32(args[2]);
