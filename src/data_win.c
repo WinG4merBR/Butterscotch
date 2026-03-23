@@ -1665,7 +1665,6 @@ DataWin* DataWin_parse(const char* filePath, DataWinParserOptions options) {
     }
 
     // GMS2: apply default FPS to rooms with speed=0
-    printf("gen8: gms2FPS = %f\n", dw->gen8.gms2FPS);
     if (dw->gen8.gms2FPS > 0) {
         repeat(dw->room.count, i) {
             if (dw->room.rooms[i].speed == 0) {
