@@ -365,8 +365,6 @@ static void soft_beginView(Renderer* r,
     ri->lastPortY = py;
     ri->lastPortW = pw;
     ri->lastPortH = ph;
-
-    // Store view origin — subtracted in blitSprite/draw calls (same as PS2)
     ri->viewX = vx;
     ri->viewY = vy;
 

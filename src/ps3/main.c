@@ -278,7 +278,6 @@ int main(void)
             }
         }
 
-        // Reset global interact state because I HATE when I get stuck while moving through rooms
         if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F10))
         {
             int32_t interactVarId = shget(runner->vmContext->globalVarNameMap, "interact");

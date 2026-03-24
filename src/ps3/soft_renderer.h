@@ -8,7 +8,6 @@ typedef struct TexturePageCacheEntry {
     int width;
     int height;
     uint64_t last_used;
-    void *rsx_handle;
     bool loaded;
 } TexturePageCacheEntry;
 

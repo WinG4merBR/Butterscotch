@@ -29,7 +29,6 @@ typedef struct {
     int height;
 } LoadedTexturePage;
 
-/* Cache global do renderer. Se preferir, mova para dentro do renderer interno. */
 static TexturePageCache g_textureCache;
 
 /* Forward declarations */
@@ -154,13 +153,11 @@ static void TexturePageCache_preloadSprite(TexturePageCache *cache, DataWin *dw,
     }
 }
 
-/* Opcional: chame isso no create do renderer */
 static void TexturePageCache_init(TexturePageCache *cache)
 {
     memset(cache, 0, sizeof(*cache));
 }
 
-/* Opcional: chame isso no destroy do renderer */
 static void TexturePageCache_destroy(TexturePageCache *cache)
 {
     for (int i = 0; i < TEXTURE_CACHE_MAX_ENTRIES; i++) {
@@ -171,7 +168,6 @@ static void TexturePageCache_destroy(TexturePageCache *cache)
             entry->pixels_xdr = NULL;
         }
 
-        entry->rsx_handle = NULL;
         entry->loaded = false;
         entry->size = 0;
         entry->width = 0;
@@ -238,8 +234,6 @@ static void TexturePageCache_evict(TexturePageCache *cache, TexturePageCacheEntr
         free(entry->pixels_xdr);
         entry->pixels_xdr = NULL;
     }
-
-    entry->rsx_handle = NULL;
 
     if (cache->used_bytes >= entry->size) {
         cache->used_bytes -= entry->size;
@@ -313,7 +307,6 @@ static TexturePageCacheEntry *TexturePageCache_get(TexturePageCache *cache, Data
     slot->width = loaded.width;
     slot->height = loaded.height;
     slot->last_used = ++cache->tick;
-    slot->rsx_handle = NULL;
     slot->loaded = true;
 
     cache->used_bytes += loaded.size;
