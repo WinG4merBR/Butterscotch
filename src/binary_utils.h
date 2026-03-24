@@ -33,17 +33,29 @@ static inline int64_t BinaryUtils_readInt64(const uint8_t* data) {
 }
 
 static inline float BinaryUtils_readFloat32(const uint8_t* data) {
+    uint32_t bits = BinaryUtils_readUint32(data);
     float val;
-    memcpy(&val, data, 4);
+    memcpy(&val, &bits, sizeof(val));
     return val;
 }
 
 static inline double BinaryUtils_readFloat64(const uint8_t* data) {
+    uint64_t bits = (uint64_t) data[0] |
+                    ((uint64_t) data[1] << 8) |
+                    ((uint64_t) data[2] << 16) |
+                    ((uint64_t) data[3] << 24) |
+                    ((uint64_t) data[4] << 32) |
+                    ((uint64_t) data[5] << 40) |
+                    ((uint64_t) data[6] << 48) |
+                    ((uint64_t) data[7] << 56);
     double val;
-    memcpy(&val, data, 8);
+    memcpy(&val, &bits, sizeof(val));
     return val;
 }
 
 static inline void BinaryUtils_writeUint32(uint8_t* data, uint32_t val) {
-    memcpy(data, &val, 4);
+    data[0] = (uint8_t)(val);
+    data[1] = (uint8_t)(val >> 8);
+    data[2] = (uint8_t)(val >> 16);
+    data[3] = (uint8_t)(val >> 24);
 }

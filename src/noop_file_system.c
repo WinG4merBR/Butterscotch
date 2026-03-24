@@ -3,7 +3,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-
 #include "stb_ds.h"
 
 // ===[ In-Memory File Storage ]===
@@ -20,7 +19,7 @@ typedef struct {
 
 // ===[ Vtable Implementations ]===
 
-static char* noopResolvePath(MAYBE_UNUSED FileSystem* fs, MAYBE_UNUSED const char* relativePath) {
+static char* noopResolvePath(FileSystem* fs, const char* relativePath) {
     return safeStrdup("./");
 }
 
@@ -64,6 +63,8 @@ static bool noopDeleteFile(FileSystem* fs, const char* relativePath) {
 }
 
 // ===[ Vtable ]===
+
+static FileSystemVtable noopFileSystemVtable;
 
 static FileSystemVtable noopFileSystemVtable = {
     .resolvePath = noopResolvePath,

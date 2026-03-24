@@ -4,14 +4,6 @@
 #include <time.h>
 #include <sys/types.h>
 
-#if defined(__GNUC__) || defined(__clang__)
-    #define MAYBE_UNUSED __attribute__((unused))
-    #define UNUSED_VAR(x) ((void)(x))
-#else
-    #define MAYBE_UNUSED
-    #define UNUSED_VAR(x) ((void)(x))
-#endif
-
 // --- C23 Polyfills ---
 #if !defined(__STDC_VERSION__) || __STDC_VERSION__ <= 201710L
     #ifndef nullptr

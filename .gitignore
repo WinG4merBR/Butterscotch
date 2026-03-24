@@ -2,3 +2,11 @@ build/
 PS3_PKG/
 .vscode/
 data.win
+
+# PS3 Build Artifacts
+temp/
+ps3out/
+*.pkg
+*.self
+*.elf
+build_ps3/

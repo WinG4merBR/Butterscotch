@@ -228,21 +228,31 @@ static void Renderer_drawSelf(Renderer* renderer, Instance* instance) {
 
 // Draws a room tile with layer shift offset applied
 static void Renderer_drawTile(Renderer* renderer, RoomTile* tile, float offsetX, float offsetY) {
+    if (renderer == NULL) {
+        fprintf(stderr, "Renderer_drawTile: renderer NULL\n");
+        return;
+    }
+
+    if (renderer->vtable == NULL) {
+        fprintf(stderr, "Renderer_drawTile: vtable NULL\n");
+        return;
+    }
+
     // If the platform has a dedicated tile renderer, use it (PS2 has separate tile atlas entries)
-    if (renderer->vtable->drawTile != nullptr) {
+    if (renderer->vtable->drawTile != NULL) {
         renderer->vtable->drawTile(renderer, tile, offsetX, offsetY);
         return;
     }
 
     int32_t tpagIndex = Renderer_resolveBackgroundTPAGIndex(renderer->dataWin, tile->backgroundDefinition);
-    if (0 > tpagIndex) return;
+    if (0 > tpagIndex) {
+        fprintf(stderr, "Renderer_drawTile: invalid tpagIndex=%d for bgDef=%d\n",
+                tpagIndex, tile->backgroundDefinition);
+        return;
+    }
 
     TexturePageItem* tpag = &renderer->dataWin->tpag.items[tpagIndex];
 
-    // The tile's sourceX/Y are in the background image's coordinate space (bounding rect).
-    // The TPAG may have been trimmed: actual content starts at (targetX, targetY) within the
-    // bounding rect and has size sourceWidth x sourceHeight. We must clamp the tile's source
-    // rect to the TPAG's content area to avoid sampling adjacent atlas textures.
     int32_t srcX = tile->sourceX;
     int32_t srcY = tile->sourceY;
     int32_t srcW = (int32_t) tile->width;
@@ -250,7 +260,6 @@ static void Renderer_drawTile(Renderer* renderer, RoomTile* tile, float offsetX,
     float drawX = (float) tile->x + offsetX;
     float drawY = (float) tile->y + offsetY;
 
-    // Clip left/top: if tile starts before the content region
     int32_t contentLeft = tpag->targetX;
     int32_t contentTop = tpag->targetY;
     if (contentLeft > srcX) {
@@ -266,7 +275,6 @@ static void Renderer_drawTile(Renderer* renderer, RoomTile* tile, float offsetX,
         srcY = contentTop;
     }
 
-    // Clip right/bottom: if tile extends past the content region
     int32_t contentRight = tpag->targetX + tpag->sourceWidth;
     int32_t contentBottom = tpag->targetY + tpag->sourceHeight;
     if (srcX + srcW > contentRight) {
@@ -278,14 +286,12 @@ static void Renderer_drawTile(Renderer* renderer, RoomTile* tile, float offsetX,
 
     if (0 >= srcW || 0 >= srcH) return;
 
-    // Convert from bounding-rect coords to atlas-relative coords (subtract targetX/Y)
     int32_t atlasOffX = srcX - tpag->targetX;
     int32_t atlasOffY = srcY - tpag->targetY;
 
-    // Extract alpha from high byte, default to 1.0 if alpha byte is 0
     uint8_t alphaByte = (tile->color >> 24) & 0xFF;
     float alpha = (alphaByte == 0) ? 1.0f : (float) alphaByte / 255.0f;
-    uint32_t bgr = tile->color & 0x00FFFFFF;
+    uint32_t bgr = tile->color & 0x00FFFFFFu;
 
     renderer->vtable->drawSpritePart(renderer, tpagIndex, atlasOffX, atlasOffY, srcW, srcH, drawX, drawY, tile->scaleX, tile->scaleY, bgr, alpha);
 }

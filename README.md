@@ -28,6 +28,7 @@ Of course, there are exceptions that break game compatibility altogether:
 
 * Linux (GLFW, OpenGL)
 * PlayStation 2 (ps2sdk, gsKit)
+* PlayStation 3 (PSL1GHT, ps3toolchain)
 * ...and maybe more in the future!
 
 ## Building Butterscotch

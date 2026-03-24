@@ -1,0 +1,134 @@
+# Yes, we'll use a separated Makefile for PS3-specific build logic
+# "But why?" - To build SELF and PKGs, we need to use ppu_rules from PSL1GHT
+# PSL1GHT is too old to work well with our main Makefile, and trying to merge the two would be a nightmare
+
+.SUFFIXES:
+
+ifeq ($(strip $(PS3DEV)),)
+  ifeq ($(strip $(DEVKITPS3)),)
+    export PS3DEV := /usr/local/ps3dev
+  else
+    export PS3DEV := $(DEVKITPS3)
+  endif
+endif
+
+ifeq ($(strip $(PSL1GHT)),)
+$(error Please set PSL1GHT in your environment)
+endif
+
+PROJECT_ROOT := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
+export PROJECT_ROOT
+
+export PATH             := $(PS3DEV)/bin:$(PS3DEV)/ppu/bin:$(PATH)
+export PORTLIBS         := $(PS3DEV)/portlibs/ppu
+export LIBPSL1GHT_INC   := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
+export LIBPSL1GHT_LIB   := -L$(PSL1GHT)/ppu/lib
+
+TARGET      := butterscotch
+BUILD       := build_ps3
+
+SOURCES     := src src/ps3
+DATA        :=
+INCLUDES    := \
+	$(PROJECT_ROOT)/src \
+	$(PROJECT_ROOT)/src/ps3 \
+	$(PROJECT_ROOT)/src/platform/ps3/include \
+	$(PROJECT_ROOT)/vendor/stb/ds \
+	$(PROJECT_ROOT)/vendor/stb/image
+
+PKGFILES    := $(PROJECT_ROOT)/PKG_TEMPLATE
+
+TITLE       := UNDERTALE
+APPID       := BTSC00001
+CONTENTID   := UP0001-$(APPID)_00-0000000000000000
+ICON0       := $(PROJECT_ROOT)/PKG_TEMPLATE/ICON0.PNG
+SFOXML      := $(PS3DEV)/bin/sfo.xml
+
+CFLAGS      := -O2 -Wall -Wextra -mcpu=cell -mhard-float \
+               -fmodulo-sched -ffunction-sections -fdata-sections -fno-builtin \
+               -include $(PROJECT_ROOT)/src/ps3/compat.h \
+               -D__PPU__ -D__PS3__ -D__CELLOS_LV2__ \
+               $(MACHDEP) $(INCLUDE)
+
+CXXFLAGS    := $(CFLAGS)
+
+LDFLAGS     := $(MACHDEP) -mcpu=cell -mhard-float -Wl,-Map,$(notdir $@).map
+
+LIBS        := -lrsx -lgcm_sys -lnet -lsysutil -lsysfs -lio -lm -lrt -llv2 -lc
+LIBDIRS     := $(PORTLIBS)
+
+include $(PSL1GHT)/ppu_rules
+
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+
+export OUTPUT   := $(PROJECT_ROOT)/$(TARGET)
+
+export VPATH    := $(foreach dir,$(SOURCES),$(PROJECT_ROOT)/$(dir)) \
+                   $(foreach dir,$(DATA),$(PROJECT_ROOT)/$(dir))
+
+export DEPSDIR  := $(PROJECT_ROOT)/$(BUILD)
+export BUILDDIR := $(PROJECT_ROOT)/$(BUILD)
+
+CFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.c)))
+CPPFILES    := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.cpp)))
+sFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.s)))
+SFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.S)))
+BINFILES    :=
+
+ifeq ($(strip $(CPPFILES)),)
+export LD := $(CC)
+else
+export LD := $(CXX)
+endif
+
+export OFILES   := $(addsuffix .o,$(BINFILES)) \
+                   $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) \
+                   $(sFILES:.s=.o) $(SFILES:.S=.o)
+
+export INCLUDE  := $(foreach dir,$(INCLUDES),-I$(dir)) \
+                   $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+                   $(LIBPSL1GHT_INC) \
+                   -I$(PROJECT_ROOT)/$(BUILD)
+
+export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
+                   $(LIBPSL1GHT_LIB)
+
+.PHONY: all elf self pkg clean rebuild
+
+all: $(BUILD)
+
+$(BUILD):
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(PROJECT_ROOT)/Makefile.ps3
+
+elf: $(BUILD)
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(PROJECT_ROOT)/Makefile.ps3 $(OUTPUT).elf
+
+self: $(BUILD)
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(PROJECT_ROOT)/Makefile.ps3 $(OUTPUT).self
+
+pkg: $(BUILD)
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(PROJECT_ROOT)/Makefile.ps3 $(OUTPUT).pkg
+
+clean:
+	@echo clean ...
+	@rm -rf $(PROJECT_ROOT)/$(BUILD) \
+	        $(PROJECT_ROOT)/$(TARGET).elf \
+	        $(PROJECT_ROOT)/$(TARGET).self \
+	        $(PROJECT_ROOT)/$(TARGET).fake.self \
+	        $(PROJECT_ROOT)/$(TARGET).pkg \
+	        $(PROJECT_ROOT)/$(TARGET).gnpdrm.pkg
+
+rebuild: clean all
+
+else
+
+DEPENDS := $(OFILES:.o=.d)
+
+$(OUTPUT).self: $(OUTPUT).elf
+$(OUTPUT).elf: $(OFILES)
+$(OUTPUT).pkg: $(OUTPUT).self
+
+-include $(DEPENDS)
+
+endif

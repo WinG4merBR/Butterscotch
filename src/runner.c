@@ -340,6 +340,7 @@ void Runner_draw(Runner* runner) {
 
     // Add tiles (skip hidden layers)
     Room* room = runner->currentRoom;
+
     repeat(room->tileCount, i) {
         RoomTile* tile = &room->tiles[i];
         // Check if this tile's layer is hidden
@@ -362,6 +363,7 @@ void Runner_draw(Runner* runner) {
         if (d->type == DRAWABLE_TILE) {
             if (runner->renderer != nullptr) {
                 RoomTile* tile = &room->tiles[d->tileIndex];
+
                 float offsetX = 0.0f, offsetY = 0.0f;
                 ptrdiff_t layerIdx = hmgeti(runner->tileLayerMap, tile->tileDepth);
                 if (layerIdx >= 0) {
