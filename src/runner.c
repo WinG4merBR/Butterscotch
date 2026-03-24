@@ -335,10 +335,8 @@ void Runner_draw(Runner* runner) {
 
     // Sort by depth descending (higher depth first)
     int32_t drawCount = (int32_t) arrlen(drawList);
-    if(!runner->isGMS2) {
-        if (drawCount > 1) {
-            qsort(drawList, drawCount, sizeof(Instance*), compareInstanceDepth);
-        }
+    if (drawCount > 1) {
+        qsort(drawList, drawCount, sizeof(Instance*), compareInstanceDepth);
     }
 
     // Draw non-foreground backgrounds (behind everything)
@@ -353,9 +351,11 @@ void Runner_draw(Runner* runner) {
     Drawable* drawables = nullptr;
 
     // Add visible instances
-    repeat(drawCount, i) {
-        Drawable d = { .type = DRAWABLE_INSTANCE, .depth = drawList[i]->depth, .instance = drawList[i] };
-        arrput(drawables, d);
+    if(!runner->isGMS2) {
+        repeat(drawCount, i) {
+            Drawable d = { .type = DRAWABLE_INSTANCE, .depth = drawList[i]->depth, .instance = drawList[i] };
+            arrput(drawables, d);
+        }
     }
 
     // Add tiles (skip hidden layers)
@@ -528,9 +528,39 @@ void Runner_draw(Runner* runner) {
                             runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, d->layer->xOffset, d->layer->yOffset, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, 1.0);
                         }
             } else if(d->layer->type == RoomLayerType_Instances) {
-                //RoomLayerInstancesData *data = d->layer->instancesData;
+                RoomLayerInstancesData *data = d->layer->instancesData;
                 // TODO: Use this for ordering instances in GMS2
+                for(uint32_t i = 0; i < data->instanceCount; i++)
+                {
+                    Instance* inst = hmget(runner->instancesToId, data->instanceIds[i]);
+                    for(int32_t i = 0; i < drawCount; i++)
+                    {
+                        Instance* drawInst = drawList[i];
+                        if(inst->instanceId == drawInst->instanceId)
+                        {
+                            arrdel(drawList, i);
+                        }
+                    }
+                    int32_t codeId = findEventCodeIdAndOwner(runner->dataWin, inst->objectIndex, EVENT_DRAW, DRAW_NORMAL, nullptr);
+                    if(!inst->visible) continue;
+                    if (codeId >= 0) {
+                        Runner_executeEvent(runner, inst, EVENT_DRAW, DRAW_NORMAL);
+                    } else if (runner->renderer != nullptr) {
+                        Renderer_drawSelf(runner->renderer, inst);
+                    }
+                }
             }
+        }
+    }
+
+    for(int32_t i = 0; i < drawCount; i++)
+    {
+        Instance* inst = drawList[i];
+        int32_t codeId = findEventCodeIdAndOwner(runner->dataWin, inst->objectIndex, EVENT_DRAW, DRAW_NORMAL, nullptr);
+        if (codeId >= 0) {
+            Runner_executeEvent(runner, inst, EVENT_DRAW, DRAW_NORMAL);
+        } else if (runner->renderer != nullptr) {
+            Renderer_drawSelf(runner->renderer, inst);
         }
     }
 
@@ -573,6 +603,7 @@ static Instance* createAndInitInstance(Runner* runner, int32_t instanceId, int32
     inst->depth = objDef->depth;
     inst->maskIndex = objDef->textureMaskId;
 
+    hmput(runner->instancesToId, instanceId, inst);
     arrput(runner->instances, inst);
 
     if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, objDef->name) != -1) {
