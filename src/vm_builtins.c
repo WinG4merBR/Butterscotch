@@ -4004,8 +4004,6 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("draw_set_halign", builtin_drawSetHalign);
     registerBuiltin("draw_set_valign", builtin_drawSetValign);
     registerBuiltin("draw_text", builtin_drawText);
-    registerBuiltin("draw_text_colour", builtin_drawText);
-    registerBuiltin("draw_text_color", builtin_drawText);
     registerBuiltin("draw_text_transformed", builtin_drawTextTransformed);
     registerBuiltin("draw_text_ext", builtin_draw_text_ext);
     registerBuiltin("draw_text_ext_transformed", builtin_draw_text_ext_transformed);
