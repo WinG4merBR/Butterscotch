@@ -1095,6 +1095,9 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
             free(tilePtrs);
         }
 
+        // Fill with default values, these will be replaced if it is GM:S 2+
+        room->layerCount = 0;
+
         if(dw->gen8.major >= 2) {
             // Tiles PointerList
             BinaryReader_seek(reader, layersPtr);
@@ -1751,7 +1754,7 @@ void DataWin_free(DataWin* dw) {
         repeat(dw->room.count, i) {
             free(dw->room.rooms[i].gameObjects);
             free(dw->room.rooms[i].tiles);
-            if (dw->room.rooms[i].layers) {
+            if (dw->room.rooms[i].layerCount != 0) {
                 repeat(dw->room.rooms[i].layerCount, j) {
                     RoomLayer* layer = &dw->room.rooms[i].layers[j];
                     if (layer->backgroundData) free(layer->backgroundData);
