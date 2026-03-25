@@ -3287,8 +3287,17 @@ static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCoun
         GMLReal lineRight  = GMLReal_fmax(lx1, lx2);
         GMLReal lineTop    = GMLReal_fmin(ly1, ly2);
         GMLReal lineBottom = GMLReal_fmax(ly1, ly2);
-        if (bbox.left > lineRight || lineLeft > bbox.right || bbox.top > lineBottom || lineTop > bbox.bottom) continue;
-
+        // bbox.right/bbox.bottom are exclusive (marginRight + 1, marginBottom + 1), so use >= for those comparisons to correctly exclude boundary-touching cases
+        // See GM-HTML5's yyInstance.js "Collision_Line"
+        if (lineLeft >= bbox.right)
+            continue;
+        if (bbox.left > lineRight)
+            continue;
+        if (bbox.top > lineBottom)
+            continue;
+        if (lineTop >= bbox.bottom)
+            continue;
+        
         // Normalize line left-to-right for clipping
         GMLReal xl = lx1, yl = ly1, xr = lx2, yr = ly2;
         if (xl > xr) { GMLReal tmp = xl; xl = xr; xr = tmp; tmp = yl; yl = yr; yr = tmp; }
@@ -3313,7 +3322,7 @@ static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCoun
         // Y-bounds check after horizontal clipping
         GMLReal clippedTop    = GMLReal_fmin(yl, yr);
         GMLReal clippedBottom = GMLReal_fmax(yl, yr);
-        if (bbox.top > clippedBottom || clippedTop > bbox.bottom) continue;
+        if (bbox.top > clippedBottom || clippedTop >= bbox.bottom) continue;
 
         // Bbox-only mode: collision confirmed
         if (prec == 0) {
