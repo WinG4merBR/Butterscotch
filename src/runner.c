@@ -364,10 +364,9 @@ void Runner_draw(Runner* runner) {
     if(runner->isGMS2) {
         // Add visible layers
         int32_t layerCount = (int32_t) runner->currentRoom->layerCount;
-        int32_t layerDrawCount = (int32_t) arrlen(layerDrawList);
         repeat(layerCount, i) {
-            if (!inst->visible) continue;
-            Drawable d = { .type = DRAWABLE_LAYER, .depth = &runner->currentRoom->layers[i]->depth, .layer = &runner->currentRoom->layers[i] };
+            if (!runner->currentRoom->layers[i].visible) continue;
+            Drawable d = { .type = DRAWABLE_LAYER, .depth = runner->currentRoom->layers[i].depth, .layer = &runner->currentRoom->layers[i] };
             arrput(drawables, d);
         }
     }
