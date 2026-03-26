@@ -3281,9 +3281,24 @@ static RValue builtin_spriteGetHeight(VMContext* ctx, RValue* args, [[maybe_unus
     if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
     return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].height);
 }
-STUB_RETURN_ZERO(sprite_get_number)
-STUB_RETURN_ZERO(sprite_get_xoffset)
-STUB_RETURN_ZERO(sprite_get_yoffset)
+
+static RValue builtin_spriteGetNumber(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].textureCount);
+}
+
+static RValue builtin_spriteGetXOffset(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].originX);
+}
+
+static RValue builtin_spriteGetYOffset(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].originY);
+}
 
 // sprite_create_from_surface(surface_id, x, y, w, h, removeback, smooth, xorig, yorig)
 static RValue builtin_spriteCreateFromSurface(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
@@ -4231,9 +4246,9 @@ void VMBuiltins_registerAll(bool isGMS2) {
     // Sprite info
     registerBuiltin("sprite_get_width", builtin_spriteGetWidth);
     registerBuiltin("sprite_get_height", builtin_spriteGetHeight);
-    registerBuiltin("sprite_get_number", builtin_sprite_get_number);
-    registerBuiltin("sprite_get_xoffset", builtin_sprite_get_xoffset);
-    registerBuiltin("sprite_get_yoffset", builtin_sprite_get_yoffset);
+    registerBuiltin("sprite_get_number", builtin_spriteGetNumber);
+    registerBuiltin("sprite_get_xoffset", builtin_spriteGetXOffset);
+    registerBuiltin("sprite_get_yoffset", builtin_spriteGetYOffset);
     registerBuiltin("sprite_create_from_surface", builtin_spriteCreateFromSurface);
     registerBuiltin("sprite_delete", builtin_spriteDelete);
 
@@ -4278,4 +4293,5 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("string_hash_to_newline", builtinStringHashToNewline);
     registerBuiltin("json_decode", builtinJsonDecode);
     registerBuiltin("font_add_sprite_ext", builtin_font_add_sprite_ext);
+    registerBuiltin("asset_get_index", builtinAssetGetIndex);
 }
