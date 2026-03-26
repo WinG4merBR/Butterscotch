@@ -531,7 +531,7 @@ void Runner_draw(Runner* runner) {
                 for(uint32_t i = 0; i < data->instanceCount; i++)
                 {
                     Instance* inst = hmget(runner->instancesToId, data->instanceIds[i]);
-                    inst->depth = d->layer->depth;
+                    if(inst->depth == 0) inst->depth = d->layer->depth;
                 }
             }
         }
