@@ -2,6 +2,7 @@
 #include "instance.h"
 #include "json_reader.h"
 #include "runner.h"
+#include "utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2459,6 +2460,27 @@ static RValue builtinInstanceCreate(VMContext* ctx, RValue* args, int32_t argCou
     return RValue_makeReal((GMLReal) inst->instanceId);
 }
 
+static RValue builtinInstanceCreateDepth(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeReal(0.0);
+    Runner* runner = (Runner*) ctx->runner;
+    GMLReal x = RValue_toReal(args[0]);
+    GMLReal y = RValue_toReal(args[1]);
+    int32_t depth = RValue_toInt32(args[2]);
+    int32_t objectIndex = RValue_toInt32(args[3]);
+    if (0 > objectIndex || runner->dataWin->objt.count <= (uint32_t) objectIndex) {
+        fprintf(stderr, "VM: instance_create: objectIndex %d out of range\n", objectIndex);
+        return RValue_makeReal(0.0);
+    }
+    Instance* callerInst = (Instance*) ctx->currentInstance;
+    Instance* inst = Runner_createInstance(runner, x, y, objectIndex);
+    if (inst == nullptr) return RValue_makeReal(-4.0); // noone
+    if (callerInst != nullptr && ctx->creatorVarID >= 0) {
+        Instance_setSelfVar(inst, ctx->creatorVarID, RValue_makeReal((GMLReal) callerInst->instanceId));
+    }
+    inst->depth = depth;
+    return RValue_makeReal((GMLReal) inst->instanceId);
+}
+
 static RValue builtinInstanceChange(VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
     Runner* runner = (Runner*) ctx->runner;
@@ -3023,6 +3045,48 @@ static RValue builtin_drawTextTransformed(VMContext* ctx, RValue* args, [[maybe_
 }
 STUB_RETURN_UNDEFINED(draw_text_ext)
 STUB_RETURN_UNDEFINED(draw_text_ext_transformed)
+
+static RValue builtin_drawTextColor(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    float x = (float) RValue_toReal(args[0]);
+    float y = (float) RValue_toReal(args[1]);
+    char* str = RValue_toString(args[2]);
+    int32_t c1 = (float) RValue_toInt32(args[3]);
+    int32_t c2 = (float) RValue_toInt32(args[4]);
+    int32_t c3 = (float) RValue_toInt32(args[5]);
+    int32_t c4 = (float) RValue_toInt32(args[6]);
+    float alpha = (float) RValue_toReal(args[7]);
+
+    runner->renderer->vtable->drawTextColor(runner->renderer, str, x, y, 1.0f, 1.0f, 0.0f, c1, c2, c3, c4, alpha);
+    free(str);
+    return RValue_makeUndefined();
+}
+
+static RValue builtin_drawTextColorTransformed(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    float x = (float) RValue_toReal(args[0]);
+    float y = (float) RValue_toReal(args[1]);
+    char* str = RValue_toString(args[2]);
+    float xscale = (float) RValue_toReal(args[3]);
+    float yscale = (float) RValue_toReal(args[4]);
+    float angle = (float) RValue_toReal(args[5]);
+    int32_t c1 = (float) RValue_toInt32(args[6]);
+    int32_t c2 = (float) RValue_toInt32(args[7]);
+    int32_t c3 = (float) RValue_toInt32(args[8]);
+    int32_t c4 = (float) RValue_toInt32(args[9]);
+    float alpha = (float) RValue_toReal(args[10]);
+
+    runner->renderer->vtable->drawTextColor(runner->renderer, str, x, y, xscale, yscale, angle, c1, c2, c3, c4, alpha);
+    free(str);
+    return RValue_makeUndefined();
+}
+STUB_RETURN_UNDEFINED(draw_text_color_ext)
+STUB_RETURN_UNDEFINED(draw_text_color_ext_transformed)
+
 STUB_RETURN_UNDEFINED(draw_surface)
 STUB_RETURN_UNDEFINED(draw_surface_ext)
 static RValue builtin_drawBackground(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
@@ -3262,9 +3326,24 @@ static RValue builtin_spriteGetHeight(VMContext* ctx, RValue* args, [[maybe_unus
     if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
     return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].height);
 }
-STUB_RETURN_ZERO(sprite_get_number)
-STUB_RETURN_ZERO(sprite_get_xoffset)
-STUB_RETURN_ZERO(sprite_get_yoffset)
+
+static RValue builtin_spriteGetNumber(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].textureCount);
+}
+
+static RValue builtin_spriteGetXOffset(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].originX);
+}
+
+static RValue builtin_spriteGetYOffset(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    int32_t spriteIndex = (int32_t) RValue_toReal(args[0]);
+    if (0 > spriteIndex || (uint32_t) spriteIndex >= ctx->dataWin->sprt.count) return RValue_makeReal(0.0);
+    return RValue_makeReal((GMLReal) ctx->dataWin->sprt.sprites[spriteIndex].originY);
+}
 
 // sprite_create_from_surface(surface_id, x, y, w, h, removeback, smooth, xorig, yorig)
 static RValue builtin_spriteCreateFromSurface(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
@@ -3891,11 +3970,32 @@ static RValue builtinJsonDecode([[maybe_unused]] VMContext* ctx, RValue* args, i
     return RValue_makeReal((double) mapIndex);
 }
 
+// json_decode
+static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) {
+        fprintf(stderr, "[asset_get_index] Expected at least 1 argument\n");
+        return RValue_makeUndefined();
+    }
+
+    const char* name = RValue_toString(args[0]);
+
+    repeat(ctx->dataWin->objt.count, i)
+    {
+        if(strcmp(ctx->dataWin->objt.objects[i].name, name) == 0)
+        {
+            return RValue_makeReal((double) i);
+            break;
+        }
+    }
+
+    return RValue_makeReal((double) 0);
+}
+
 STUB_RETURN_VALUE(font_add_sprite_ext, -1.0)
 
 // ===[ REGISTRATION ]===
 
-void VMBuiltins_registerAll(void) {
+void VMBuiltins_registerAll(bool isGMS2) {
     requireMessage(!initialized, "Attempting to register all VMBuiltins, but it was already registered!");
     initialized = true;
 
@@ -4119,7 +4219,12 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("instance_number", builtinInstanceNumber);
     registerBuiltin("instance_find", builtinInstanceFind);
     registerBuiltin("instance_destroy", builtinInstanceDestroy);
-    registerBuiltin("instance_create", builtinInstanceCreate);
+    if(!isGMS2) {
+        registerBuiltin("instance_create", builtinInstanceCreate);
+    }
+    else {
+        registerBuiltin("instance_create_depth", builtinInstanceCreateDepth);
+    }
     registerBuiltin("instance_change", builtinInstanceChange);
     registerBuiltin("instance_deactivate_all", builtinInstanceDeactivateAll);
     registerBuiltin("instance_activate_all", builtinInstanceActivateAll);
@@ -4171,12 +4276,24 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("draw_text_transformed", builtin_drawTextTransformed);
     registerBuiltin("draw_text_ext", builtin_draw_text_ext);
     registerBuiltin("draw_text_ext_transformed", builtin_draw_text_ext_transformed);
+    registerBuiltin("draw_text_color", builtin_drawTextColor);
+    registerBuiltin("draw_text_color_transformed", builtin_drawTextColorTransformed);
+    registerBuiltin("draw_text_color_ext", builtin_draw_text_color_ext);
+    registerBuiltin("draw_text_color_ext_transformed", builtin_draw_text_color_ext_transformed);
+    registerBuiltin("draw_text_colour", builtin_drawTextColor);
+    registerBuiltin("draw_text_colour_transformed", builtin_drawTextColorTransformed);
+    registerBuiltin("draw_text_colour_ext", builtin_draw_text_color_ext);
+    registerBuiltin("draw_text_colour_ext_transformed", builtin_draw_text_color_ext_transformed);
     registerBuiltin("draw_surface", builtin_draw_surface);
     registerBuiltin("draw_surface_ext", builtin_draw_surface_ext);
-    registerBuiltin("draw_background", builtin_drawBackground);
-    registerBuiltin("draw_background_ext", builtin_drawBackgroundExt);
-    registerBuiltin("draw_background_stretched", builtin_drawBackgroundStretched);
-    registerBuiltin("draw_background_part_ext", builtin_drawBackgroundPartExt);
+    if(!isGMS2) {
+        registerBuiltin("draw_background", builtin_drawBackground);
+        registerBuiltin("draw_background_ext", builtin_drawBackgroundExt);
+        registerBuiltin("draw_background_stretched", builtin_drawBackgroundStretched);
+        registerBuiltin("draw_background_part_ext", builtin_drawBackgroundPartExt);
+        registerBuiltin("background_get_width", builtinBackgroundGetWidth);
+        registerBuiltin("background_get_height", builtinBackgroundGetHeight);
+    }
     registerBuiltin("background_get_width", builtinBackgroundGetWidth);
     registerBuiltin("background_get_height", builtinBackgroundGetHeight);
     registerBuiltin("draw_self", builtin_draw_self);
@@ -4205,9 +4322,9 @@ void VMBuiltins_registerAll(void) {
     // Sprite info
     registerBuiltin("sprite_get_width", builtin_spriteGetWidth);
     registerBuiltin("sprite_get_height", builtin_spriteGetHeight);
-    registerBuiltin("sprite_get_number", builtin_sprite_get_number);
-    registerBuiltin("sprite_get_xoffset", builtin_sprite_get_xoffset);
-    registerBuiltin("sprite_get_yoffset", builtin_sprite_get_yoffset);
+    registerBuiltin("sprite_get_number", builtin_spriteGetNumber);
+    registerBuiltin("sprite_get_xoffset", builtin_spriteGetXOffset);
+    registerBuiltin("sprite_get_yoffset", builtin_spriteGetYOffset);
     registerBuiltin("sprite_create_from_surface", builtin_spriteCreateFromSurface);
     registerBuiltin("sprite_delete", builtin_spriteDelete);
 
@@ -4224,8 +4341,8 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("make_colour_hsv", builtinMakeColourHsv);
 
     // Display
-    registerBuiltin("display_get_width", builtin_display_get_width);
-    registerBuiltin("display_get_height", builtin_display_get_height);
+    registerBuiltin("display_get_width", builtinWindowGetWidth);
+    registerBuiltin("display_get_height", builtinWindowGetHeight);
 
     // Collision
     registerBuiltin("place_meeting", builtinPlaceMeeting);
@@ -4235,10 +4352,12 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("instance_position", builtinInstancePosition);
     registerBuiltin("place_free", builtinPlaceFree);
 
-    // Tile layers
-    registerBuiltin("tile_layer_hide", builtinTileLayerHide);
-    registerBuiltin("tile_layer_show", builtinTileLayerShow);
-    registerBuiltin("tile_layer_shift", builtinTileLayerShift);
+     if(!isGMS2) {
+        // Tile layers
+        registerBuiltin("tile_layer_hide", builtinTileLayerHide);
+        registerBuiltin("tile_layer_show", builtinTileLayerShow);
+        registerBuiltin("tile_layer_shift", builtinTileLayerShift);
+    }
 
     // Path
     registerBuiltin("path_start", builtinPathStart);
@@ -4252,4 +4371,5 @@ void VMBuiltins_registerAll(void) {
     registerBuiltin("string_hash_to_newline", builtinStringHashToNewline);
     registerBuiltin("json_decode", builtinJsonDecode);
     registerBuiltin("font_add_sprite_ext", builtin_font_add_sprite_ext);
+    registerBuiltin("asset_get_index", builtinAssetGetIndex);
 }
