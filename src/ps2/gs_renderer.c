@@ -1331,7 +1331,7 @@ static void gsDrawText(Renderer* renderer, const char* text, float x, float y, f
 
 static void gsDrawTriangle(Renderer *renderer, float x1, float y1, float x2, float y2, float x3, float y3, bool outline)
 {
-    GSRenderer* gs = (GLRenderer*) renderer;
+    GsRenderer* gs = (GsRenderer*) renderer;
     if(outline)
     {
         gsDrawLine(renderer, x1, y1, x2, y2, 1, renderer->drawColor, 1.0);
