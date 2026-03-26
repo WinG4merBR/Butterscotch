@@ -1196,9 +1196,48 @@ static void gsDrawLine(Renderer* renderer, float x1, float y1, float x2, float y
     gs->zCounter++;
 }
 
-// PS2 gsKit doesn't support per-vertex colors on lines, so we just use color1
-static void gsDrawLineColor(Renderer* renderer, float x1, float y1, float x2, float y2, float width, uint32_t color1, [[maybe_unused]] uint32_t color2, float alpha) {
-    renderer->vtable->drawLine(renderer, x1, y1, x2, y2, width, color1, alpha);
+static void gsDrawLineColor(Renderer* renderer, float x1, float y1, float x2, float y2, float width, uint32_t color1, uint32_t color2, float alpha) {
+    GsRenderer* gs = (GsRenderer*) renderer;
+
+    uint8_t a = alphaToGS(alpha);
+
+    uint8_t r1 = BGR_R(color1);
+    uint8_t g1 = BGR_G(color1);
+    uint8_t b1 = BGR_B(color1);
+
+    uint8_t r2 = BGR_R(color2);
+    uint8_t g2 = BGR_G(color2);
+    uint8_t b2 = BGR_B(color2);
+
+    u64 lineColor1 = GS_SETREG_RGBAQ(r1, g1, b1, a, 0x00);
+    u64 lineColor2 = GS_SETREG_RGBAQ(r2, g2, b2, a, 0x00);
+
+    float sx1 = (x1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy1 = (y1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+    float sx2 = (x2 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy2 = (y2 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+
+    gsKit_prim_line_goraud(gs->gsGlobal, sx1, sy1, sx2, sy2, gs->zCounter, lineColor1, lineColor2);
+    gs->zCounter++;
+}
+
+static void gsDrawTriangle(Renderer *renderer, float x1, float y1, float x2, float y2, float x3, float y3, bool outline)
+{
+    GSRenderer* gs = (GLRenderer*) renderer;
+    if(outline)
+    {
+        gsDrawLine(renderer, x1, y1, x2, y2, 1, renderer->drawColor, 1.0);
+        gsDrawLine(renderer, x2, y2, x3, y3, 1, renderer->drawColor, 1.0);
+        gsDrawLine(renderer, x3, y3, x1, y1, 1, renderer->drawColor, 1.0);
+    } else {
+        float r = (float) BGR_R(renderer->drawColor) / 255.0f;
+        float g = (float) BGR_G(renderer->drawColor) / 255.0f;
+        float b = (float) BGR_B(renderer->drawColor) / 255.0f;
+
+        u64 triColor = GS_SETREG_RGBAQ(r, g, b, alphaToGs(renderer->drawAlpha), 0x00);
+        gsKit_prim_triangle(x1, y1, x2, y2, x3, y3, gz->zCounter, triColor);
+        gs->zCounter++;
+    }
 }
 
 static void gsDrawText(Renderer* renderer, const char* text, float x, float y, float xscale, float yscale, [[maybe_unused]] float angleDeg) {
@@ -1599,6 +1638,7 @@ static RendererVtable gsVtable = {
     .drawLineColor = gsDrawLineColor,
     .drawText = gsDrawText,
     .drawTextColor = gsDrawTextColor,
+    .drawTriangle = gsDrawTriangle,
     .flush = gsFlush,
     .createSpriteFromSurface = gsCreateSpriteFromSurface,
     .deleteSprite = gsDeleteSprite,
