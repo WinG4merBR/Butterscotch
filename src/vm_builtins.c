@@ -3927,6 +3927,26 @@ static RValue builtinJsonDecode([[maybe_unused]] VMContext* ctx, RValue* args, i
 
 STUB_RETURN_VALUE(font_add_sprite_ext, -1.0)
 
+static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) {
+        fprintf(stderr, "[asset_get_index] Expected at least 1 argument\n");
+        return RValue_makeUndefined();
+    }
+
+    const char* name = RValue_toString(args[0]);
+
+    repeat(ctx->dataWin->objt.count, i)
+    {
+        if(strcmp(ctx->dataWin->objt.objects[i].name, name) == 0)
+        {
+            return RValue_makeReal((double) i);
+            break;
+        }
+    }
+
+    return RValue_makeReal((double) 0);
+}
+
 // ===[ REGISTRATION ]===
 
 void VMBuiltins_registerAll(bool isGMS2) {
