@@ -12,148 +12,17 @@
 #include "stb_ds.h"
 #include "utils.h"
 
-// ===[ Constants ]===
-#define MAX_QUADS 4096
-#define FLOATS_PER_VERTEX 8  // x, y, u, v, r, g, b, a
-#define VERTICES_PER_QUAD 4
-#define INDICES_PER_QUAD 6
-
-// ===[ Shader Sources ]===
-static const char* vertexShaderSource =
-    "#version 410 core\n"
-    "layout(location = 0) in vec2 aPos;\n"
-    "layout(location = 1) in vec2 aTexCoord;\n"
-    "layout(location = 2) in vec4 aColor;\n"
-    "uniform mat4 uProjection;\n"
-    "out vec2 vTexCoord;\n"
-    "out vec4 vColor;\n"
-    "void main() {\n"
-    "    gl_Position = uProjection * vec4(aPos, 0.0, 1.0);\n"
-    "    vTexCoord = aTexCoord;\n"
-    "    vColor = aColor;\n"
-    "}\n";
-
-static const char* fragmentShaderSource =
-    "#version 410 core\n"
-    "in vec2 vTexCoord;\n"
-    "in vec4 vColor;\n"
-    "uniform sampler2D uTexture;\n"
-    "out vec4 fragColor;\n"
-    "void main() {\n"
-    "    fragColor = texture(uTexture, vTexCoord) * vColor;\n"
-    "}\n";
-
-// ===[ Shader Compilation ]===
-
-static GLuint compileShader(GLenum type, const char* source) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-
-    GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
-        fprintf(stderr, "GL: Shader compilation failed: %s\n", infoLog);
-        abort();
-    }
-    return shader;
-}
-
-static GLuint linkProgram(GLuint vertShader, GLuint fragShader) {
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vertShader);
-    glAttachShader(program, fragShader);
-    glLinkProgram(program);
-
-    GLint success;
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
-        fprintf(stderr, "GL: Shader linking failed: %s\n", infoLog);
-        abort();
-    }
-    return program;
-}
-
-// ===[ Batch Flush ]===
-
-static void flushBatch(GLRenderer* gl) {
-    if (gl->quadCount == 0) return;
-
-    int32_t vertexCount = gl->quadCount * VERTICES_PER_QUAD;
-    int32_t indexCount = gl->quadCount * INDICES_PER_QUAD;
-
-    glBindBuffer(GL_ARRAY_BUFFER, gl->vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * FLOATS_PER_VERTEX * sizeof(float), gl->vertexData);
-
-    glBindTexture(GL_TEXTURE_2D, gl->currentTextureId);
-    glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, nullptr);
-
-    gl->quadCount = 0;
-}
-
 // ===[ Vtable Implementations ]===
 
 static void glInit(Renderer* renderer, DataWin* dataWin) {
     GLRenderer* gl = (GLRenderer*) renderer;
     renderer->dataWin = dataWin;
 
-    // Compile shaders
-    GLuint vertShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
-    GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
-    gl->shaderProgram = linkProgram(vertShader, fragShader);
-    glDeleteShader(vertShader);
-    glDeleteShader(fragShader);
-
-    gl->uProjection = glGetUniformLocation(gl->shaderProgram, "uProjection");
-    gl->uTexture = glGetUniformLocation(gl->shaderProgram, "uTexture");
-
-    // Create VAO/VBO/EBO
-    glGenVertexArrays(1, &gl->vao);
-    glGenBuffers(1, &gl->vbo);
-    glGenBuffers(1, &gl->ebo);
-
-    glBindVertexArray(gl->vao);
-
-    // VBO: sized for max quads
-    int32_t vboSize = MAX_QUADS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * (int32_t) sizeof(float);
-    glBindBuffer(GL_ARRAY_BUFFER, gl->vbo);
-    glBufferData(GL_ARRAY_BUFFER, vboSize, nullptr, GL_DYNAMIC_DRAW);
-
-    // EBO: pre-fill with quad index pattern (0,1,2,2,3,0 repeated)
-    int32_t eboSize = MAX_QUADS * INDICES_PER_QUAD * (int32_t) sizeof(uint32_t);
-    uint32_t* indices = safeMalloc(eboSize);
-    for (int32_t i = 0; MAX_QUADS > i; i++) {
-        uint32_t base = (uint32_t) i * 4;
-        indices[i * 6 + 0] = base + 0;
-        indices[i * 6 + 1] = base + 1;
-        indices[i * 6 + 2] = base + 2;
-        indices[i * 6 + 3] = base + 2;
-        indices[i * 6 + 4] = base + 3;
-        indices[i * 6 + 5] = base + 0;
-    }
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl->ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, eboSize, indices, GL_STATIC_DRAW);
-    free(indices);
-
-    // Vertex attributes: pos(2f), texcoord(2f), color(4f)
-    int32_t stride = FLOATS_PER_VERTEX * (int32_t) sizeof(float);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, stride, (void*) 0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void*) (2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, (void*) (4 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
-
-    // Allocate CPU-side vertex buffer
-    gl->vertexData = safeMalloc(MAX_QUADS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * sizeof(float));
-
     // Load textures from TXTR pages
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_DEPTH_TEST);
+    glTexEnvi(GL_TEX_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
     gl->textureCount = dataWin->txtr.count;
     gl->glTextures = safeMalloc(gl->textureCount * sizeof(GLuint));
     gl->textureWidths = safeMalloc(gl->textureCount * sizeof(int32_t));
@@ -201,14 +70,7 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    gl->quadCount = 0;
     gl->currentTextureId = 0;
-
-    // Create FBO (texture will be allocated/resized in beginFrame)
-    glGenFramebuffers(1, &gl->fbo);
-    gl->fboTexture = 0;
-    gl->fboWidth = 0;
-    gl->fboHeight = 0;
 
     // Save original counts so we know which slots are from data.win vs dynamic
     gl->originalTexturePageCount = gl->textureCount;
@@ -221,20 +83,13 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
 static void glDestroy(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*) renderer;
 
-    if (gl->fboTexture != 0) glDeleteTextures(1, &gl->fboTexture);
-    glDeleteFramebuffers(1, &gl->fbo);
     glDeleteTextures(1, &gl->whiteTexture);
 
     glDeleteTextures((GLsizei) gl->textureCount, gl->glTextures);
-    glDeleteProgram(gl->shaderProgram);
-    glDeleteVertexArrays(1, &gl->vao);
-    glDeleteBuffers(1, &gl->vbo);
-    glDeleteBuffers(1, &gl->ebo);
 
     free(gl->glTextures);
     free(gl->textureWidths);
     free(gl->textureHeights);
-    free(gl->vertexData);
     free(gl);
 }
 
@@ -248,31 +103,6 @@ static void glBeginFrame(Renderer* renderer, int32_t gameW, int32_t gameH, int32
     gl->gameW = gameW;
     gl->gameH = gameH;
 
-    // Resize FBO to game resolution if needed
-    if (gameW != gl->fboWidth || gameH != gl->fboHeight) {
-        if (gl->fboTexture != 0) glDeleteTextures(1, &gl->fboTexture);
-
-        glGenTextures(1, &gl->fboTexture);
-        glBindTexture(GL_TEXTURE_2D, gl->fboTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gameW, gameH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gl->fboTexture, 0);
-
-        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            fprintf(stderr, "GL: Framebuffer incomplete (status=0x%X)\n", status);
-        }
-
-        gl->fboWidth = gameW;
-        gl->fboHeight = gameH;
-        fprintf(stderr, "GL: FBO resized to %dx%d\n", gameW, gameH);
-    }
-
-    // Bind FBO and clear
-    glBindFramebuffer(GL_FRAMEBUFFER, gl->fbo);
     glViewport(0, 0, gameW, gameH);
 }
 
@@ -311,34 +141,21 @@ static void glBeginView(Renderer* renderer, int32_t viewX, int32_t viewY, int32_
         projection = result;
     }
 
-    glUseProgram(gl->shaderProgram);
-    glUniformMatrix4fv(gl->uProjection, 1, GL_FALSE, projection.m);
-    glUniform1i(gl->uTexture, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixf(projection.m);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
     glActiveTexture(GL_TEXTURE0);
-
-    glBindVertexArray(gl->vao);
 }
 
 static void glEndView(Renderer* renderer) {
     GLRenderer* gl = (GLRenderer*) renderer;
-    flushBatch(gl);
     glDisable(GL_SCISSOR_TEST);
 }
 
-static void glEndFrame(Renderer* renderer) {
-    GLRenderer* gl = (GLRenderer*) renderer;
-    glBindVertexArray(0);
+static void glEndFrame(Renderer* renderer) {}
 
-    // Blit the full game-resolution FBO to the window
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, gl->fboWidth, gl->fboHeight, 0, 0, gl->windowW, gl->windowH, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-static void glRendererFlush(Renderer* renderer) {
-    flushBatch((GLRenderer*) renderer);
-}
+static void glRendererFlush(Renderer* renderer) {}
 
 static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y, float originX, float originY, float xscale, float yscale, float angleDeg, uint32_t color, float alpha) {
     GLRenderer* gl = (GLRenderer*) renderer;
@@ -354,15 +171,7 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     int32_t texW = gl->textureWidths[pageId];
     int32_t texH = gl->textureHeights[pageId];
     if (texW == 0 || texH == 0) return;
-
-    // Flush if texture changed or batch full
-    if (gl->quadCount > 0 && gl->currentTextureId != texId) {
-        flushBatch(gl);
-    }
-    if (gl->quadCount >= MAX_QUADS) {
-        flushBatch(gl);
-    }
-    gl->currentTextureId = texId;
+    glBindTexture(GL_TEXTURE_2D, texId);
 
     // Compute normalized UVs from TPAG source rect
     float u0 = (float) tpag->sourceX / (float) texW;
@@ -395,26 +204,27 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     float g = (float) BGR_G(color) / 255.0f;
     float b = (float) BGR_B(color) / 255.0f;
 
-    // Write 4 vertices into batch buffer
-    float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    glBegin(GL_QUADS);
+        // Vertex 0: top-left
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u0, v0);
+        glVertex2f(x0, y0);
 
-    // Vertex 0: top-left
-    verts[0] = x0; verts[1] = y0; verts[2] = u0; verts[3] = v0;
-    verts[4] = r;  verts[5] = g;  verts[6] = b;  verts[7] = alpha;
+        // Vertex 1: top-right
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u1, v0);
+        glVertex2f(x1, y1);
 
-    // Vertex 1: top-right
-    verts[8]  = x1; verts[9]  = y1; verts[10] = u1; verts[11] = v0;
-    verts[12] = r;  verts[13] = g;  verts[14] = b;  verts[15] = alpha;
+        // Vertex 2: bottom-right
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u1, v1);
+        glVertex2f(x2, y2);
 
-    // Vertex 2: bottom-right
-    verts[16] = x2; verts[17] = y2; verts[18] = u1; verts[19] = v1;
-    verts[20] = r;  verts[21] = g;  verts[22] = b;  verts[23] = alpha;
-
-    // Vertex 3: bottom-left
-    verts[24] = x3; verts[25] = y3; verts[26] = u0; verts[27] = v1;
-    verts[28] = r;  verts[29] = g;  verts[30] = b;  verts[31] = alpha;
-
-    gl->quadCount++;
+        // Vertex 3: bottom-left
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u0, v1);
+        glVertex2f(x3, y3);
+    glEnd();
 }
 
 static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, uint32_t color, float alpha) {
@@ -433,9 +243,7 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     if (texW == 0 || texH == 0) return;
 
     // Flush if texture changed or batch full
-    if (gl->quadCount > 0 && gl->currentTextureId != texId) flushBatch(gl);
-    if (gl->quadCount >= MAX_QUADS) flushBatch(gl);
-    gl->currentTextureId = texId;
+    glBindTexture(GL_TEXTURE_2D, texId);
 
     // Compute UVs for the sub-region within the atlas
     float u0 = (float) (tpag->sourceX + srcOffX) / (float) texW;
@@ -454,58 +262,55 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     float g = (float) BGR_G(color) / 255.0f;
     float b = (float) BGR_B(color) / 255.0f;
 
-    // Write 4 vertices into batch buffer
-    float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    glBegin(GL_QUADS);
+        // Vertex 0: top-left
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u0, v0);
+        glVertex2f(x0, y0);
 
-    // Vertex 0: top-left
-    verts[0] = x0; verts[1] = y0; verts[2] = u0; verts[3] = v0;
-    verts[4] = r;  verts[5] = g;  verts[6] = b;  verts[7] = alpha;
+        // Vertex 1: top-right
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u1, v0);
+        glVertex2f(x1, y0);
 
-    // Vertex 1: top-right
-    verts[8]  = x1; verts[9]  = y0; verts[10] = u1; verts[11] = v0;
-    verts[12] = r;  verts[13] = g;  verts[14] = b;  verts[15] = alpha;
+        // Vertex 2: bottom-right
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u1, v1);
+        glVertex2f(x1, y1);
 
-    // Vertex 2: bottom-right
-    verts[16] = x1; verts[17] = y1; verts[18] = u1; verts[19] = v1;
-    verts[20] = r;  verts[21] = g;  verts[22] = b;  verts[23] = alpha;
-
-    // Vertex 3: bottom-left
-    verts[24] = x0; verts[25] = y1; verts[26] = u0; verts[27] = v1;
-    verts[28] = r;  verts[29] = g;  verts[30] = b;  verts[31] = alpha;
-
-    gl->quadCount++;
+        // Vertex 3: bottom-left
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(u0, v1);
+        glVertex2f(x0, y1);
+    glEnd();
 }
 
 // Emits a single colored quad into the batch using the white pixel texture
 static void emitColoredQuad(GLRenderer* gl, float x0, float y0, float x1, float y1, float r, float g, float b, float a) {
-    if (gl->quadCount > 0 && gl->currentTextureId != gl->whiteTexture) {
-        flushBatch(gl);
-    }
-    if (gl->quadCount >= MAX_QUADS) {
-        flushBatch(gl);
-    }
-    gl->currentTextureId = gl->whiteTexture;
+    glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
 
-    float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    glBegin(GL_QUADS);
+        // All UVs point to (0.5, 0.5) center of the 1x1 white texture
+        // Vertex 0: top-left
+        glColor4f(r, g, b, a);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x0, y0);
 
-    // All UVs point to (0.5, 0.5) center of the 1x1 white texture
-    // Vertex 0: top-left
-    verts[0] = x0; verts[1] = y0; verts[2] = 0.5f; verts[3] = 0.5f;
-    verts[4] = r;  verts[5] = g;  verts[6] = b;    verts[7] = a;
+        // Vertex 1: top-right
+        glColor4f(r, g, b, a);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1, y0);
 
-    // Vertex 1: top-right
-    verts[8]  = x1; verts[9]  = y0; verts[10] = 0.5f; verts[11] = 0.5f;
-    verts[12] = r;  verts[13] = g;  verts[14] = b;    verts[15] = a;
+        // Vertex 2: bottom-right
+        glColor4f(r, g, b, a);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1, y1);
 
-    // Vertex 2: bottom-right
-    verts[16] = x1; verts[17] = y1; verts[18] = 0.5f; verts[19] = 0.5f;
-    verts[20] = r;  verts[21] = g;  verts[22] = b;    verts[23] = a;
-
-    // Vertex 3: bottom-left
-    verts[24] = x0; verts[25] = y1; verts[26] = 0.5f; verts[27] = 0.5f;
-    verts[28] = r;  verts[29] = g;  verts[30] = b;    verts[31] = a;
-
-    gl->quadCount++;
+        // Vertex 3: bottom-left
+        glColor4f(r, g, b, a);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x0, y1);
+    glEnd();
 }
 
 static void glDrawRectangle(Renderer* renderer, float x1, float y1, float x2, float y2, uint32_t color, float alpha, bool outline) {
@@ -546,34 +351,29 @@ static void glDrawLine(Renderer* renderer, float x1, float y1, float x2, float y
     float px = (-dy / len) * halfW;
     float py = (dx / len) * halfW;
 
-    // Emit quad as 4 vertices forming a rectangle along the line
-    if (gl->quadCount > 0 && gl->currentTextureId != gl->whiteTexture) {
-        flushBatch(gl);
-    }
-    if (gl->quadCount >= MAX_QUADS) {
-        flushBatch(gl);
-    }
-    gl->currentTextureId = gl->whiteTexture;
-
-    float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
 
     // Vertex 0: start + perpendicular
-    verts[0] = x1 + px; verts[1] = y1 + py; verts[2] = 0.5f; verts[3] = 0.5f;
-    verts[4] = r; verts[5] = g; verts[6] = b; verts[7] = alpha;
+    glBegin(GL_QUADS);
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1 + px, y1 + py);
 
-    // Vertex 1: start - perpendicular
-    verts[8] = x1 - px; verts[9] = y1 - py; verts[10] = 0.5f; verts[11] = 0.5f;
-    verts[12] = r; verts[13] = g; verts[14] = b; verts[15] = alpha;
+        // Vertex 1: start - perpendicular
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1 - px, y1 - py);
 
-    // Vertex 2: end - perpendicular
-    verts[16] = x2 - px; verts[17] = y2 - py; verts[18] = 0.5f; verts[19] = 0.5f;
-    verts[20] = r; verts[21] = g; verts[22] = b; verts[23] = alpha;
+        // Vertex 2: end - perpendicular
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x2 - px, y2 - py);
 
-    // Vertex 3: end + perpendicular
-    verts[24] = x2 + px; verts[25] = y2 + py; verts[26] = 0.5f; verts[27] = 0.5f;
-    verts[28] = r; verts[29] = g; verts[30] = b; verts[31] = alpha;
-
-    gl->quadCount++;
+        // Vertex 3: end + perpendicular
+        glColor4f(r, g, b, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x2 + px, y2 + py);
+    glEnd();
 }
 
 static void glDrawLineColor(Renderer* renderer, float x1, float y1, float x2, float y2, float width, uint32_t color1, uint32_t color2, float alpha) {
@@ -597,34 +397,31 @@ static void glDrawLineColor(Renderer* renderer, float x1, float y1, float x2, fl
     float px = (-dy / len) * halfW;
     float py = (dx / len) * halfW;
 
-    // Emit quad with per-vertex colors (color1 at start, color2 at end)
-    if (gl->quadCount > 0 && gl->currentTextureId != gl->whiteTexture) {
-        flushBatch(gl);
-    }
-    if (gl->quadCount >= MAX_QUADS) {
-        flushBatch(gl);
-    }
-    gl->currentTextureId = gl->whiteTexture;
+    
+    glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
 
-    float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    glBegin(GL_QUADS);
+        // Vertex 0: start + perpendicular (color1)
+        glColor4f(r1, g1, b1, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1 + px, y1 + py); 
 
-    // Vertex 0: start + perpendicular (color1)
-    verts[0] = x1 + px; verts[1] = y1 + py; verts[2] = 0.5f; verts[3] = 0.5f;
-    verts[4] = r1; verts[5] = g1; verts[6] = b1; verts[7] = alpha;
+        // Vertex 1: start - perpendicular (color1)
+        glColor4f(r1, g1, b1, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x1 - px, y1 - py); 
 
-    // Vertex 1: start - perpendicular (color1)
-    verts[8] = x1 - px; verts[9] = y1 - py; verts[10] = 0.5f; verts[11] = 0.5f;
-    verts[12] = r1; verts[13] = g1; verts[14] = b1; verts[15] = alpha;
+        // Vertex 2: end - perpendicular (color2)
+        glColor4f(r2, g2, b2, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x2 - px, y2 - py); 
 
-    // Vertex 2: end - perpendicular (color2)
-    verts[16] = x2 - px; verts[17] = y2 - py; verts[18] = 0.5f; verts[19] = 0.5f;
-    verts[20] = r2; verts[21] = g2; verts[22] = b2; verts[23] = alpha;
+        // Vertex 3: end + perpendicular (color2)
+        glColor4f(r2, g2, b2, alpha);
+        glTexCoord2f(0.5f, 0.5f);
+        glVertex2f(x2 + px, y2 + py); 
 
-    // Vertex 3: end + perpendicular (color2)
-    verts[24] = x2 + px; verts[25] = y2 + py; verts[26] = 0.5f; verts[27] = 0.5f;
-    verts[28] = r2; verts[29] = g2; verts[30] = b2; verts[31] = alpha;
-
-    gl->quadCount++;
+    glEnd();
 }
 
 // ===[ Text Drawing ]===
@@ -650,6 +447,7 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
     int32_t texW = gl->textureWidths[pageId];
     int32_t texH = gl->textureHeights[pageId];
     if (texW == 0 || texH == 0) return;
+    glBindTexture(GL_TEXTURE_2D, texId);
 
     uint32_t color = renderer->drawColor;
     float alpha = renderer->drawAlpha;
@@ -704,11 +502,6 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
                 continue;
             }
 
-            // Flush if texture changed or batch full
-            if (gl->quadCount > 0 && gl->currentTextureId != texId) flushBatch(gl);
-            if (gl->quadCount >= MAX_QUADS) flushBatch(gl);
-            gl->currentTextureId = texId;
-
             // Compute UVs from glyph position in the font's atlas
             float u0 = (float) (fontTpag->sourceX + glyph->sourceX) / (float) texW;
             float v0 = (float) (fontTpag->sourceY + glyph->sourceY) / (float) texH;
@@ -729,21 +522,23 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
             Matrix4f_transformPoint(&transform, localX0, localY1, &px3, &py3);
 
             // Write 4 vertices
-            float* verts = gl->vertexData + gl->quadCount * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+            glBegin(GL_QUADS);            
+                glColor4f(r, g, b, alpha);
+                glTexCoord2f(u0, v0);
+                glVertex2f(px0, py0); 
 
-            verts[0] = px0; verts[1] = py0; verts[2] = u0; verts[3] = v0;
-            verts[4] = r;   verts[5] = g;   verts[6] = b;  verts[7] = alpha;
+                glColor4f(r, g, b, alpha);
+                glTexCoord2f(u1, v0);
+                glVertex2f(px1, py1); 
 
-            verts[8]  = px1; verts[9]  = py1; verts[10] = u1; verts[11] = v0;
-            verts[12] = r;   verts[13] = g;   verts[14] = b;  verts[15] = alpha;
+                glColor4f(r, g, b, alpha);
+                glTexCoord2f(u1, v1);
+                glVertex2f(px2, py2); 
 
-            verts[16] = px2; verts[17] = py2; verts[18] = u1; verts[19] = v1;
-            verts[20] = r;   verts[21] = g;   verts[22] = b;  verts[23] = alpha;
-
-            verts[24] = px3; verts[25] = py3; verts[26] = u0; verts[27] = v1;
-            verts[28] = r;   verts[29] = g;   verts[30] = b;  verts[31] = alpha;
-
-            gl->quadCount++;
+                glColor4f(r, g, b, alpha);
+                glTexCoord2f(u0, v1);
+                glVertex2f(px3, py3);
+            glEnd();
 
             // Advance cursor by glyph shift + kerning
             cursorX += glyph->shift;
@@ -819,11 +614,8 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t 
 
     if (0 >= w || 0 >= h) return -1;
 
-    // Flush any pending draws before reading pixels
-    flushBatch(gl);
-
     // Read pixels from the FBO (application_surface)
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
+    glReadBuffer(GL_FRONT);
 
     uint8_t* pixels = safeMalloc((size_t) w * (size_t) h * 4);
     if (pixels == nullptr) return -1;

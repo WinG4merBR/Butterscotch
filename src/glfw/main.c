@@ -503,6 +503,7 @@ int main(int argc, char* argv[]) {
     if (args.headless) {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     }
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
 
     GLFWwindow* window = glfwCreateWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, windowTitle, nullptr, nullptr);
     if (window == nullptr) {
