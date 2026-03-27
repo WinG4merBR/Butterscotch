@@ -492,6 +492,8 @@ int main(int argc, char* argv[]) {
     shcopyFromTo(args.tilesToBeTraced, runner->vmContext->tilesToBeTraced);
     runner->vmContext->traceEventInherited = args.traceEventInherited;
 
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
+
     // Init GLFW
     if (!glfwInit()) {
         fprintf(stderr, "Failed to initialize GLFW\n");
@@ -503,7 +505,6 @@ int main(int argc, char* argv[]) {
     if (args.headless) {
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     }
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
 
     GLFWwindow* window = glfwCreateWindow((int) gen8->defaultWindowWidth, (int) gen8->defaultWindowHeight, windowTitle, nullptr, nullptr);
     if (window == nullptr) {
