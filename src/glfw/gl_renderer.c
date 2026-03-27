@@ -21,7 +21,7 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     // Load textures from TXTR pages
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_DEPTH_TEST);
-    glTexEnvi(GL_TEX_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     gl->textureCount = dataWin->txtr.count;
     gl->glTextures = safeMalloc(gl->textureCount * sizeof(GLuint));
@@ -621,7 +621,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t x, int32_t 
     if (pixels == nullptr) return -1;
 
     // OpenGL Y is bottom-up, GML Y is top-down, so flip the Y coordinate
-    int32_t glY = gl->fboHeight - y - h;
+    int32_t glY = gl->gameH - y - h;
     glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     // Flip vertically (OpenGL reads bottom-to-top)
