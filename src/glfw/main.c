@@ -775,9 +775,7 @@ int main(int argc, char* argv[]) {
         if (shouldScreenshot) {
             // Bind FBO so glReadPixels reads from the game's native-resolution texture
             GLRenderer* gl = (GLRenderer*) renderer;
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, gl->fbo);
             captureScreenshot(args.screenshotPattern, runner->frameCount, gameW, gameH);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         }
 
         if (args.exitAtFrame >= 0 && runner->frameCount >= args.exitAtFrame) {
