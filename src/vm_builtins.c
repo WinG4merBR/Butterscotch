@@ -3986,7 +3986,7 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
         }
     }
 
-    return RValue_makeReal((double) 0);
+    return RValue_makeReal((double) -1);
 }
 
 // ===[ REGISTRATION ]===
