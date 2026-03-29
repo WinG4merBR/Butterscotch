@@ -425,6 +425,8 @@ static void glDrawLineColor(Renderer* renderer, float x1, float y1, float x2, fl
 
 static void glDrawTriangle(Renderer *renderer, float x1, float y1, float x2, float y2, float x3, float y3, bool outline)
 {
+    GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
+
     if(outline)
     {
         glDrawLine(renderer, x1, y1, x2, y2, 1, renderer->drawColor, 1.0);
@@ -435,6 +437,7 @@ static void glDrawTriangle(Renderer *renderer, float x1, float y1, float x2, flo
         float g = (float) BGR_G(renderer->drawColor) / 255.0f;
         float b = (float) BGR_B(renderer->drawColor) / 255.0f;
         
+        glBindTexture(GL_TEXTURE_2D, gl->whiteTexture);
 
         glBegin(GL_TRIANGLES);
             glColor4f(r, g, b, renderer->drawAlpha);
