@@ -156,6 +156,13 @@ clean:
 	        $(PROJECT_ROOT)/*.pkg \
 			$(PROJECT_ROOT)/*.gnpdrm.pkg \
 	        $(PKG_USRDIR)/data.win
+
+test: $(BUILD)
+	@echo "===> Testing full compile pipeline (ephemeral)"
+	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile $(OUTPUT).elf
+
+	@echo "Cleaning build artifacts..."
+	@rm -f "$(BUILD)/$(OUTPUT).elf"
 rebuild: clean all
 
 else
