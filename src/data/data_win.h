@@ -3,10 +3,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-
-#ifdef __PPU__
-#include "rsx/rsx_loading_screen.h"
-#endif
 #include "compat.h"
 
 // Forward declaration for progress callback

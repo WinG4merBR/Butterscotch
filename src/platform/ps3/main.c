@@ -17,7 +17,7 @@
 #include "data_win.h"
 #include "vm.h"
 #include "runner.h"
-#include "rsx/gl_legacy_renderer.h"
+#include "gl_legacy_renderer.h"
 #include "sys/ps3_time.h"
 #include "runner_keyboard.h"
 #include "noop_file_system.h"

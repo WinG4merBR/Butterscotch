@@ -22,7 +22,6 @@ export LIBPSL1GHT_LIB   := -L$(PSL1GHT)/ppu/lib
 
 TARGET      := butterscotch
 BUILD       := build_ps3
-HOST_BUILD  := build_host
 
 SOURCES 	:= \
 	src/core \
@@ -45,7 +44,6 @@ INCLUDES := \
 PKGFILES    := $(PROJECT_ROOT)/PKG_TEMPLATE
 PKG_USRDIR  := $(PKGFILES)/USRDIR
 DATA_WIN    ?= $(PROJECT_ROOT)/data.win
-TXTR_PACK   := $(PKG_USRDIR)/txtr.pack
 
 TITLE ?= Butterscotch
 APPID ?= BTSC00001
@@ -54,19 +52,6 @@ ATTRIBUTES  := 0x32
 CONTENTID   := UP0001-$(APPID)_00-0000000000000000
 ICON0       := $(PROJECT_ROOT)/PKG_TEMPLATE/ICON0.PNG
 SFOXML      := $(PS3DEV)/bin/sfo.xml
-
-HOST_CC      ?= cc
-HOST_CFLAGS  := -O2 -Wall -Wextra -std=gnu11 \
-                -I$(PROJECT_ROOT)/src \
-                -I$(PROJECT_ROOT)/vendor/stb/ds \
-                -I$(PROJECT_ROOT)/vendor/stb/image
-HOST_LDFLAGS := -lm
-HOST_TXTR_TOOL := $(PROJECT_ROOT)/$(HOST_BUILD)/txtr_cooker
-HOST_TXTR_TOOL_SOURCES := \
-	$(PROJECT_ROOT)/tools/txtr_cooker.c \
-	$(PROJECT_ROOT)/src/core/binary_reader.c \
-	$(PROJECT_ROOT)/src/data/data_win.c \
-	$(PROJECT_ROOT)/src/platform/ps3/stb_impl.c
 
 CFLAGS      := -O2 -Wall -Wextra -mcpu=cell -mhard-float \
                -fmodulo-sched -ffunction-sections -fdata-sections -fno-builtin \
@@ -133,14 +118,9 @@ $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile
 
-$(PROJECT_ROOT)/$(HOST_BUILD):
-	@mkdir -p $@
 
 $(PKG_USRDIR):
 	@mkdir -p $@
-
-$(HOST_TXTR_TOOL): $(HOST_TXTR_TOOL_SOURCES) | $(PROJECT_ROOT)/$(HOST_BUILD)
-	$(HOST_CC) $(HOST_CFLAGS) $(HOST_TXTR_TOOL_SOURCES) -o $@ $(HOST_LDFLAGS)
 
 check_data_win:
 	@if [ ! -f "$(DATA_WIN)" ]; then \
@@ -148,17 +128,13 @@ check_data_win:
 		exit 1; \
 	fi
 
-assets: check_data_win $(HOST_TXTR_TOOL) | $(PKG_USRDIR)
-	cp "$(DATA_WIN)" "$(PKG_USRDIR)/data.win"
-	"$(HOST_TXTR_TOOL)" "$(DATA_WIN)" "$(TXTR_PACK)"
-
 elf: $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile $(OUTPUT).elf
 
 self: $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile $(OUTPUT).self
 
-pkg: assets $(BUILD)
+pkg: $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile \
 		$(OUTPUT).pkg \
 		TITLE="$(TITLE)" \
@@ -171,15 +147,12 @@ pkg: assets $(BUILD)
 clean:
 	@echo clean ...
 	@rm -rf $(PROJECT_ROOT)/$(BUILD) \
-	        $(PROJECT_ROOT)/$(HOST_BUILD) \
-	        $(PROJECT_ROOT)/$(TARGET).elf \
-	        $(PROJECT_ROOT)/$(TARGET).self \
-	        $(PROJECT_ROOT)/$(TARGET).fake.self \
-	        $(PROJECT_ROOT)/$(TARGET).pkg \
-			$(PROJECT_ROOT)/$(TARGET).gnpdrm.pkg \
-	        $(PKG_USRDIR)/data.win \
-	        $(TXTR_PACK)
-
+	        $(PROJECT_ROOT)/*.elf \
+	        $(PROJECT_ROOT)/*.self \
+	        $(PROJECT_ROOT)/*.fake.self \
+	        $(PROJECT_ROOT)/*.pkg \
+			$(PROJECT_ROOT)/*.gnpdrm.pkg \
+	        $(PKG_USRDIR)/data.win
 rebuild: clean all
 
 else

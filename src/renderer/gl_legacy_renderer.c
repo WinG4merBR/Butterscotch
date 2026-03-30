@@ -17,6 +17,34 @@
 #include "rsxutil.h"
 #include "utils.h"
 
+static inline void computeInsetUvRect(int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
+                                      int32_t texW, int32_t texH,
+                                      float* u0, float* v0, float* u1, float* v1) {
+    float halfTexelU = 0.5f / (float) texW;
+    float halfTexelV = 0.5f / (float) texH;
+
+    float minU = (float) srcX / (float) texW;
+    float minV = (float) srcY / (float) texH;
+    float maxU = (float) (srcX + srcW) / (float) texW;
+    float maxV = (float) (srcY + srcH) / (float) texH;
+
+    if (srcW <= 1) {
+        *u0 = minU + halfTexelU;
+        *u1 = *u0;
+    } else {
+        *u0 = minU + halfTexelU;
+        *u1 = maxU - halfTexelU;
+    }
+
+    if (srcH <= 1) {
+        *v0 = minV + halfTexelV;
+        *v1 = *v0;
+    } else {
+        *v0 = minV + halfTexelV;
+        *v1 = maxV - halfTexelV;
+    }
+}
+
 // ===[ Vtable Implementations ]===
 
 static void glInit(Renderer* renderer, DataWin* dataWin) {
@@ -213,11 +241,10 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     if (texW == 0 || texH == 0) return;
     glBindTexture(GL_TEXTURE_2D, texId);
 
-    // Compute normalized UVs from TPAG source rect
-    float u0 = (float) tpag->sourceX / (float) texW;
-    float v0 = (float) tpag->sourceY / (float) texH;
-    float u1 = (float) (tpag->sourceX + tpag->sourceWidth) / (float) texW;
-    float v1 = (float) (tpag->sourceY + tpag->sourceHeight) / (float) texH;
+    // Inset UVs by half a texel to avoid bleeding between packed atlas regions.
+    float u0, v0, u1, v1;
+    computeInsetUvRect(tpag->sourceX, tpag->sourceY, tpag->sourceWidth, tpag->sourceHeight,
+                       texW, texH, &u0, &v0, &u1, &v1);
 
     // Compute local quad corners (relative to origin, with target offset)
     float localX0 = (float) tpag->targetX - originX;
@@ -285,11 +312,10 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     // Flush if texture changed or batch full
     glBindTexture(GL_TEXTURE_2D, texId);
 
-    // Compute UVs for the sub-region within the atlas
-    float u0 = (float) (tpag->sourceX + srcOffX) / (float) texW;
-    float v0 = (float) (tpag->sourceY + srcOffY) / (float) texH;
-    float u1 = (float) (tpag->sourceX + srcOffX + srcW) / (float) texW;
-    float v1 = (float) (tpag->sourceY + srcOffY + srcH) / (float) texH;
+    // Inset UVs by half a texel to avoid bleeding between packed atlas regions.
+    float u0, v0, u1, v1;
+    computeInsetUvRect(tpag->sourceX + srcOffX, tpag->sourceY + srcOffY, srcW, srcH,
+                       texW, texH, &u0, &v0, &u1, &v1);
 
     // Quad corners (no origin offset, no transform - draw_sprite_part ignores sprite origin)
     float x0 = x;
