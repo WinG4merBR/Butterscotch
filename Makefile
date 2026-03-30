@@ -128,13 +128,16 @@ check_data_win:
 		exit 1; \
 	fi
 
+assets: check_data_win | $(PKG_USRDIR)
+	cp "$(DATA_WIN)" "$(PKG_USRDIR)/data.win"
+
 elf: $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile $(OUTPUT).elf
 
 self: $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile $(OUTPUT).self
 
-pkg: $(BUILD)
+pkg: assets $(BUILD)
 	@$(MAKE) -C $(BUILD) -f $(PROJECT_ROOT)/Makefile \
 		$(OUTPUT).pkg \
 		TITLE="$(TITLE)" \
