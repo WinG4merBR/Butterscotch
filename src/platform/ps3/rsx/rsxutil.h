@@ -18,12 +18,12 @@ typedef struct {
 void waitFlip(void);
 void clearBuffer(rsxBuffer *buffer, uint32_t color);
 
-int flip(gcmContextData *context, s32 buffer);
+int rsxFlip(gcmContextData *context, s32 buffer);
 int makeBuffer(rsxBuffer *buffer, u16 width, u16 height, int id);
 int getResolution(u16 *width, u16 *height);
 
 gcmContextData *initScreen(void *host_addr, u32 size);
 
-void setRenderTarget(gcmContextData *context, rsxBuffer *buffer);
+void rsxSetRenderTarget(gcmContextData *context, rsxBuffer *buffer);
 
 #endif

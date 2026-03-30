@@ -1605,7 +1605,7 @@ DataWin *DataWin_parse(const char *filePath, DataWinParserOptions options)
     }
     sysFSStat st;
     sysFsFstat(fd, &st);
-    long fileSize = (long)st.st_size;
+    long fileSize = (long)st.size;
 
     DataWin *dw = safeCalloc(1, sizeof(DataWin));
     printf("Opened file '%s' with size %ld bytes\n", filePath, fileSize);

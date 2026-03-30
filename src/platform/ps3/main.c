@@ -6,29 +6,27 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/process.h>
-#include <sysutil/video.h>
+#include <sysutil/video_out.h>
 #include <rsx/gcm_sys.h>
 #include <rsx/rsx.h>
 #include <io/pad.h>
 #include <sysutil/sysutil.h>
+#include <GL/gl.h>
 
 #include "rsx/rsxutil.h"
 #include "data_win.h"
 #include "vm.h"
 #include "runner.h"
-#include "renderer/soft_renderer.h"
+#include "rsx/gl_legacy_renderer.h"
 #include "sys/ps3_time.h"
 #include "runner_keyboard.h"
 #include "noop_file_system.h"
 #include "input/pad_mapping.h"
 #include "core/log.h"
-#include "rsx/rsx_loading_screen.h"
 
 #ifndef PS3_DATA_WIN_PATH
 #define PS3_DATA_WIN_PATH "/dev_hdd0/game/DEFAULT/USRDIR/data.win"
 #endif
-
-#define MAX_BUFFERS 2
 
 static const int PAD_MAPPING_COUNT = sizeof(PAD_MAPPINGS) / sizeof(PAD_MAPPINGS[0]);
 static bool prevState[sizeof(PAD_MAPPINGS) / sizeof(PAD_MAPPINGS[0])] = {0};
@@ -78,7 +76,7 @@ DataWin *loadDataWin()
             .parseFunc = true,
             .parseStrg = true,
             .parseTxtr = true,
-            .loadTxtrBlobData = false,
+            .loadTxtrBlobData = true,
             .parseAudo = false, // We don't need to parse audio data yet, because our implementation doesn't support audio yet :3
             .skipLoadingPreciseMasksForNonPreciseSprites = true,
             .progressCallback = loadingCallback,
@@ -115,42 +113,22 @@ static void sysutil_callback(u64 status, u64 param, void *usrdata)
     }
 }
 
-static void loading_step(LoadingScreen *loading,
-                         gcmContextData *context,
-                         rsxBuffer *buffers,
-                         int *currentBuffer,
-                         u16 width,
-                         u16 height,
-                         const char *status,
-                         float progress)
-{
-    LoadingScreen_setStatus(loading, status, progress);
-    LoadingScreen_render(loading, context, &buffers[*currentBuffer], width, height);
-    waitFlip();
-    flip(context, buffers[*currentBuffer].id);
-    *currentBuffer ^= 1;
-}
-
 static Renderer *createPlatformRenderer(DataWin *dataWin, gcmContextData *context)
 {
     (void)context;
-    fprintf(stderr, "PS3: using SoftRenderer backend\n");
-    return SoftRenderer_create(dataWin);
+    fprintf(stderr, "PS3: using PS3GL backend\n");
+    Renderer *renderer = GLLegacyRenderer_create();
+    if (renderer != NULL && renderer->vtable != NULL && renderer->vtable->init != NULL)
+    {
+        renderer->vtable->init(renderer, dataWin);
+    }
+    return renderer;
 }
 
 static void preloadRendererRoom(Renderer *renderer, Room *room)
 {
-    SoftRenderer_preloadRoom(renderer, room);
-}
-
-static void bindRendererBuffer(Renderer *renderer,
-                               rsxBuffer *buffer,
-                               int width,
-                               int height,
-                               int gameWidth,
-                               int gameHeight)
-{
-    SoftRenderer_setBuffer(renderer, buffer->ptr, width, height, gameWidth, gameHeight);
+    (void)renderer;
+    (void)room;
 }
 
 static void destroyRenderer(Renderer *renderer)
@@ -170,62 +148,31 @@ int main(void)
 {
     sysUtilRegisterCallback(0, sysutil_callback, NULL);
 
-    void *host_addr = memalign(1024 * 1024, HOST_SIZE);
-
-    if (!host_addr)
-    {
-        logger("Butterscotch", "FATAL: failed to allocate RSX host memory");
-        return 1;
-    }
-    gcmContextData *context = initScreen(host_addr, HOST_SIZE);
-
-    if (!context)
-    {
-        logger("Butterscotch", "FATAL: failed to initialize screen");
-        return 1;
-    }
-
     u16 width, height;
-    getResolution(&width, &height);
-
-    rsxBuffer buffers[MAX_BUFFERS];
-    for (int i = 0; i < MAX_BUFFERS; i++)
+    if (!getResolution(&width, &height))
     {
-        makeBuffer(&buffers[i], width, height, i);
-        clearBuffer(&buffers[i], 0xFF000000u);
+        width = 1280;
+        height = 720;
     }
 
-    int currentBuffer = 0;
-    flip(context, MAX_BUFFERS - 1);
-    LoadingScreen loading;
-    LoadingScreen_init(&loading, "Butterscotch4PS3");
     ioPadInit(7);
-
-    loading_step(&loading, context, buffers, &currentBuffer, width, height,
-                 "Loading data.win...", 0.20f);
 
     DataWin *dataWin = loadDataWin();
 
     if (!dataWin)
     {
-        loading_step(&loading, context, buffers, &currentBuffer, width, height,
-                     "Failed to load data.win", 0.10f);
         logger("Butterscotch", "FATAL: failed to load data.win");
         return 1;
     }
 
     // Create a VM and a runner
     logger(dataWin->gen8.displayName, "Creating VM and runner...");
-    loading_step(&loading, context, buffers, &currentBuffer, width, height,
-                 "Creating VM and runner...", 0.50f);
     FileSystem *fs = NoopFileSystem_create();
     VMContext *vm = VM_create(dataWin);
     Runner *runner = Runner_create(dataWin, vm, fs);
-    loading_step(&loading, context, buffers, &currentBuffer, width, height,
-                 "Launching game...", 0.90f);
 
     // Attach a renderer
-    Renderer *renderer = createPlatformRenderer(dataWin, context);
+    Renderer *renderer = createPlatformRenderer(dataWin, NULL);
     runner->renderer = renderer;
 
     // Initialize the first room before entering the main loop
@@ -288,14 +235,6 @@ int main(void)
             lastPreloadedRoomIndex = runner->currentRoomIndex;
         }
 
-        // Render the frame
-        bindRendererBuffer(renderer,
-                           &buffers[currentBuffer],
-                           width,
-                           height,
-                           dataWin->gen8.defaultWindowWidth,
-                           dataWin->gen8.defaultWindowHeight);
-
         renderer->vtable->beginFrame(renderer,
                                      dataWin->gen8.defaultWindowWidth,
                                      dataWin->gen8.defaultWindowHeight,
@@ -307,13 +246,13 @@ int main(void)
             uint8_t r = (bg) & 0xFF;
             uint8_t g = (bg >> 8) & 0xFF;
             uint8_t b = (bg >> 16) & 0xFF;
-            uint32_t px = 0xFF000000 | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
-            clearBuffer(&buffers[currentBuffer], px);
+            glClearColor((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
         }
         else
         {
-            clearBuffer(&buffers[currentBuffer], 0xFF000000u);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         Room *room = runner->currentRoom;
         int32_t gameW = dataWin->gen8.defaultWindowWidth;
@@ -354,10 +293,6 @@ int main(void)
         runner->viewCurrent = 0;
 
         renderer->vtable->endFrame(renderer);
-
-        waitFlip();
-        flip(context, buffers[currentBuffer].id);
-        currentBuffer ^= 1;
 
         uint32_t roomSpeed = runner->currentRoom->speed;
         double targetFrameTime = (roomSpeed > 0) ? (1.0 / (double)roomSpeed) : (1.0 / 60.0);

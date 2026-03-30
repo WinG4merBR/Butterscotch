@@ -174,7 +174,7 @@ static bool TexturePackIndex_ensureLoaded(TexturePackIndex* pack, DataWin* dw)
     if (sysFsFstat(pack->fd, &st) != 0) {
         return false;
     }
-    pack->file_size = (uint64_t)st.st_size;
+    pack->file_size = (uint64_t)st.size;
 #else
     pack->file = fopen(pack->path, "rb");
     if (pack->file == NULL) {

@@ -38,6 +38,7 @@ SOURCES 	:= \
 DATA :=
 INCLUDES := \
 	$(shell find $(PROJECT_ROOT)/src -type d) \
+	$(PROJECT_ROOT)/ps3gl/include \
 	$(PROJECT_ROOT)/vendor/stb/ds \
 	$(PROJECT_ROOT)/vendor/stb/image
 
@@ -67,7 +68,7 @@ HOST_TXTR_TOOL_SOURCES := \
 	$(PROJECT_ROOT)/src/data/data_win.c \
 	$(PROJECT_ROOT)/src/platform/ps3/stb_impl.c
 
-CFLAGS      := -O2 -Wall -Wextra -mcpu=cell -mhard-float \
+CFLAGS      := -O2 -Wall -mcpu=cell -Wextra -mcpu=cell -mhard-float \
                -fmodulo-sched -ffunction-sections -fdata-sections -fno-builtin \
                -D__PPU__ -D__PS3__ -D__CELLOS_LV2__ \
 			   -DPS3_DATA_WIN_PATH=\"/dev_hdd0/game/$(APPID)/USRDIR/data.win\" \
@@ -77,7 +78,14 @@ CXXFLAGS    := $(CFLAGS)
 
 LDFLAGS     := $(MACHDEP) -mcpu=cell -mhard-float -Wl,-Map,$(notdir $@).map
 
-LIBS        := -lrsx -lgcm_sys -lnet -lsysutil -lsysfs -lio -lm -lrt -llv2 -lc
+PS3GL_LOCAL_LIB := $(PROJECT_ROOT)/ps3gl/libPS3GL.a
+ifeq ($(wildcard $(PS3GL_LOCAL_LIB)),)
+PS3GL_LINK := -lPS3GL
+else
+PS3GL_LINK := $(PS3GL_LOCAL_LIB)
+endif
+
+LIBS        := $(PS3GL_LINK) -lsimdmath -lrsx -lgcm_sys -lnet -lsysutil -lsysfs -lio -lm -lrt -llv2 -lc
 LIBDIRS     := $(PORTLIBS)
 
 include $(PSL1GHT)/ppu_rules
@@ -93,6 +101,7 @@ export DEPSDIR  := $(PROJECT_ROOT)/$(BUILD)
 export BUILDDIR := $(PROJECT_ROOT)/$(BUILD)
 
 CFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.c)))
+CFILES      := $(filter-out ps3gl.c ffp_shader_fpo.c ffp_shader_vpo.c,$(CFILES))
 CPPFILES    := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.cpp)))
 sFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.s)))
 SFILES      := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(PROJECT_ROOT)/$(dir)/*.S)))

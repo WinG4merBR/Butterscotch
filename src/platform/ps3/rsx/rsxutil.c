@@ -3,7 +3,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <unistd.h>
-#include <sysutil/video.h>
+#include <sysutil/video_out.h>
 #include <rsx/gcm_sys.h>
 #include <rsx/rsx.h>
 #include <io/pad.h>
@@ -41,7 +41,7 @@ void clearBuffer(rsxBuffer *buffer, uint32_t color)
         buffer->ptr[i] = color;
 }
 
-int flip(gcmContextData *context, s32 buffer)
+int rsxFlip(gcmContextData *context, s32 buffer)
 {
     if (gcmSetFlip(context, buffer) == 0) {
         rsxFlushBuffer(context);
@@ -75,11 +75,11 @@ error:
 
 int getResolution(u16 *width, u16 *height)
 {
-    videoState      state;
-    videoResolution resolution;
+    videoOutState      state;
+    videoOutResolution resolution;
 
-    if (videoGetState(0, 0, &state) == 0 &&
-        videoGetResolution(state.displayMode.resolution, &resolution) == 0)
+    if (videoOutGetState(0, 0, &state) == 0 &&
+        videoOutGetResolution(state.displayMode.resolution, &resolution) == 0)
     {
         if (width)  *width  = resolution.width;
         if (height) *height = resolution.height;
@@ -91,49 +91,49 @@ int getResolution(u16 *width, u16 *height)
 gcmContextData *initScreen(void *host_addr, u32 size)
 {
     gcmContextData    *context = NULL;
-    videoState         state;
-    videoState         postState;
-    videoConfiguration vconfig;
-    videoConfiguration fallbackConfig;
+    videoOutState         state;
+    videoOutState         postState;
+    videoOutConfiguration vconfig;
+    videoOutConfiguration fallbackConfig;
     u32                targetResolution;
-    videoResolution    res;
+    videoOutResolution    res;
     int                configureRes;
 
     rsxInit(&context, CB_SIZE, size, host_addr);
     if (!context) goto error;
 
-    if (videoGetState(0, 0, &state) != 0) goto error;
+    if (videoOutGetState(0, 0, &state) != 0) goto error;
     if (state.state != 0)               goto error;
-    if (videoGetResolution(state.displayMode.resolution, &res) != 0) goto error;
+    if (videoOutGetResolution(state.displayMode.resolution, &res) != 0) goto error;
 
-    targetResolution = VIDEO_RESOLUTION_720;
-    if (videoGetResolution(targetResolution, &res) != 0) {
+    targetResolution = VIDEO_OUT_RESOLUTION_720;
+    if (videoOutGetResolution(targetResolution, &res) != 0) {
         targetResolution = state.displayMode.resolution;
-        if (videoGetResolution(targetResolution, &res) != 0) goto error;
+        if (videoOutGetResolution(targetResolution, &res) != 0) goto error;
     }
 
     memset(&vconfig, 0, sizeof(vconfig));
     vconfig.resolution = targetResolution;
-    vconfig.format     = VIDEO_BUFFER_FORMAT_XRGB;
+    vconfig.format     = VIDEO_OUT_BUFFER_FORMAT_XRGB;
     vconfig.pitch      = res.width * sizeof(u32);
     vconfig.aspect     = state.displayMode.aspect;
 
     memset(&fallbackConfig, 0, sizeof(fallbackConfig));
     fallbackConfig.resolution = state.displayMode.resolution;
-    fallbackConfig.format     = VIDEO_BUFFER_FORMAT_XRGB;
+    fallbackConfig.format     = VIDEO_OUT_BUFFER_FORMAT_XRGB;
     fallbackConfig.pitch      = res.width * sizeof(u32);
     fallbackConfig.aspect     = state.displayMode.aspect;
 
     waitRSXIdle(context);
 
-    configureRes = videoConfigure(0, &vconfig, NULL, 0);
+    configureRes = videoOutConfigure(0, &vconfig, NULL, 0);
     if (configureRes != 0) {
-        if (videoGetResolution(fallbackConfig.resolution, &res) != 0) goto error;
+        if (videoOutGetResolution(fallbackConfig.resolution, &res) != 0) goto error;
         fallbackConfig.pitch = res.width * sizeof(u32);
-        if (videoConfigure(0, &fallbackConfig, NULL, 0) != 0) goto error;
+        if (videoOutConfigure(0, &fallbackConfig, NULL, 0) != 0) goto error;
     }
-    if (videoGetState(0, 0, &postState) != 0) goto error;
-    if (videoGetResolution(postState.displayMode.resolution, &res) != 0) goto error;
+    if (videoOutGetState(0, 0, &postState) != 0) goto error;
+    if (videoOutGetResolution(postState.displayMode.resolution, &res) != 0) goto error;
 
     fprintf(stderr, "PS3: video mode %ux%u\n", res.width, res.height);
 
@@ -170,7 +170,7 @@ static void waitRSXIdle(gcmContextData *context)
     waitFinish(context, sLabelVal);
 }
 
-void setRenderTarget(gcmContextData *context, rsxBuffer *buffer)
+void rsxSetRenderTarget(gcmContextData *context, rsxBuffer *buffer)
 {
     gcmSurface sf;
     sf.colorFormat     = GCM_SURFACE_X8R8G8B8;
