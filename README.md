@@ -14,7 +14,7 @@ This fork is focused exclusively on the PlayStation®3 and aims to adapt the ori
 While the original Butterscotch can run multiple games, including titles such as **DELTARUNE (SURVEY_PROGRAM)**, this PlayStation®3-focused version is currently being developed primarily with **UNDERTALE** as its main target.
 
 ## How to build
-You need [ScummVM Dockerized PS3 Toolchains](https://hub.docker.com/layers/scummvm/dockerized-toolchains/ps3/images/sha256-0b89f032c11e454d1613ba8ac5bfb7f36d47ad61e3d4fb798e7639aed0f21e33) and [PS3GL](https://github.com/Fancy2209/PS3GL) before all.
+You need Docker and [ScummVM Dockerized PS3 Toolchains](https://hub.docker.com/layers/scummvm/dockerized-toolchains/ps3/images/sha256-0b89f032c11e454d1613ba8ac5bfb7f36d47ad61e3d4fb798e7639aed0f21e33) before all.
 
 To build a pkg, run:
 ```bash
