@@ -1628,9 +1628,45 @@ static RValue builtinArrayLength1d(VMContext* ctx, RValue* args, int32_t argCoun
 // ===[ COLLISION FUNCTIONS]===
 
 static RValue builtinPlaceFree(VMContext* ctx, RValue* args, int32_t argCount) {
-    // place_free stub (Because I'm not doing collision right now.)
-    logStubbedFunction(ctx, "place_free");
-    return RValue_makeBool(true);
+    if (2 > argCount) return RValue_makeBool(true);
+
+    Runner* runner = (Runner*) ctx->runner;
+    Instance* caller = (Instance*) ctx->currentInstance;
+    if (caller == nullptr) return RValue_makeBool(true);
+
+    GMLReal testX = RValue_toReal(args[0]);
+    GMLReal testY = RValue_toReal(args[1]);
+
+    // Save current position and temporarily move to test position
+    GMLReal savedX = caller->x;
+    GMLReal savedY = caller->y;
+    caller->x = testX;
+    caller->y = testY;
+
+    InstanceBBox callerBBox = Collision_computeBBox(runner->dataWin, caller);
+    bool free = true;
+
+    if (callerBBox.valid) {
+        int32_t instanceCount = (int32_t) arrlen(runner->instances);
+        repeat(instanceCount, i) {
+            Instance* other = runner->instances[i];
+            if (!other->active || !other->solid || other == caller) continue;
+
+            InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
+            if (!otherBBox.valid) continue;
+
+            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+                free = false;
+                break;
+            }
+        }
+    }
+
+    // Restore original position
+    caller->x = savedX;
+    caller->y = savedY;
+
+    return RValue_makeBool(free);
 }
 
 // ===[ STUBBED FUNCTIONS ]===
