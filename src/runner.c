@@ -797,7 +797,7 @@ Instance* Runner_createInstance(Runner* runner, GMLReal x, GMLReal y, int32_t ob
     return inst;
 }
 
-void Runner_destroyInstance([[maybe_unused]] Runner* runner, Instance* inst) {
+void Runner_destroyInstance(MAYBE_UNUSED Runner* runner, Instance* inst) {
     GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
     Runner_executeEvent(runner, inst, EVENT_DESTROY, 0);
     // A destroyed instance must ALWAYS be not active
