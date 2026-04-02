@@ -137,7 +137,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
     }
 
     // OS constants
-    if (strcmp(name, "os_type") == 0) return RValue_makeReal(4.0); // os_linux
+    if (strcmp(name, "os_type") == 0) return RValue_makeReal(0.0); // os_linux
     if (strcmp(name, "os_windows") == 0) return RValue_makeReal(0.0);
     if (strcmp(name, "os_ps4") == 0) return RValue_makeReal(6.0);
     if (strcmp(name, "os_psvita") == 0) return RValue_makeReal(12.0);
@@ -318,6 +318,12 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
         if (strcmp(name, "view_vspeed") == 0) {
             if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) {
                 return RValue_makeReal((GMLReal) runner->currentRoom->views[arrayIndex].speedY);
+            }
+            return RValue_makeReal(0.0);
+        }
+        if (strcmp(name, "view_enabled") == 0) {
+            if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) {
+                return RValue_makeReal((GMLReal) runner->currentRoom->views[arrayIndex].enabled);
             }
             return RValue_makeReal(0.0);
         }
@@ -595,6 +601,12 @@ void VMBuiltins_setVariable(VMContext* ctx, const char* name, RValue val, int32_
     if (strcmp(name, "view_vspeed") == 0) {
         if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) {
             runner->currentRoom->views[arrayIndex].speedY = RValue_toInt32(val);
+        }
+        return;
+    }
+    if (strcmp(name, "view_enabled") == 0) {
+        if (arrayIndex >= 0 && MAX_VIEWS > arrayIndex) {
+            runner->currentRoom->views[arrayIndex].enabled = RValue_toBool(val);
         }
         return;
     }
@@ -1753,6 +1765,15 @@ static RValue builtin_audioPlaySound(VMContext* ctx, RValue* args, [[maybe_unuse
     int32_t priority = RValue_toInt32(args[1]);
     bool loop = RValue_toBool(args[2]);
     int32_t instanceId = audio->vtable->playSound(audio, soundIndex, priority, loop);
+    return RValue_makeReal((GMLReal) instanceId);
+}
+
+static RValue builtin_actionSound(VMContext* ctx, RValue* args, [[maybe_unused]] int32_t argCount) {
+    AudioSystem* audio = getAudioSystem(ctx);
+    if (audio == nullptr) return RValue_makeReal(-1.0);
+    int32_t soundIndex = RValue_toInt32(args[0]);
+    bool loop = RValue_toBool(args[1]);
+    int32_t instanceId = audio->vtable->playSound(audio, soundIndex, -99999, loop);
     return RValue_makeReal((GMLReal) instanceId);
 }
 
@@ -4161,6 +4182,11 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
     return RValue_makeReal((double) -1);
 }
 
+static RValue builtinActionAnotherRoom(VMContext* ctx, RValue* args, int32_t argCount) {
+    ctx->runner->pendingRoom = RValue_toInt32(args[0]);
+    return RValue_makeUndefined();
+}
+
 // ===[ REGISTRATION ]===
 
 void VMBuiltins_registerAll(bool isGMS2) {
@@ -4230,6 +4256,7 @@ void VMBuiltins_registerAll(bool isGMS2) {
     // Room
     registerBuiltin("room_get_name", builtinRoomGetName);
     registerBuiltin("room_goto_next", builtinRoomGotoNext);
+    registerBuiltin("action_next_room", builtinRoomGotoNext);
     registerBuiltin("room_goto_previous", builtinRoomGotoPrevious);
     registerBuiltin("room_goto", builtinRoomGoto);
     registerBuiltin("room_restart", builtinRoomRestart);
@@ -4406,9 +4433,11 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("action_set_gravity", builtinActionSetGravity);
     registerBuiltin("action_set_hspeed", builtinActionSetHspeed);
     registerBuiltin("action_set_vspeed", builtinActionSetVspeed);
+    registerBuiltin("action_another_room", builtinActionAnotherRoom);
     registerBuiltin("event_inherited", builtinEventInherited);
     registerBuiltin("event_user", builtinEventUser);
     registerBuiltin("event_perform", builtinEventPerform);
+    registerBuiltin("action_sound", builtin_actionSound);
 
     // Buffer
     registerBuiltin("buffer_create", builtin_buffer_create);
@@ -4532,7 +4561,6 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("get_timer", builtin_get_timer);
     registerBuiltin("action_if_variable", builtinActionIfVariable);
     registerBuiltin("action_set_alarm", builtinActionSetAlarm);
-    registerBuiltin("action_sound",builtin_action_sound);
     registerBuiltin("string_hash_to_newline", builtinStringHashToNewline);
     registerBuiltin("json_decode", builtinJsonDecode);
     registerBuiltin("font_add_sprite_ext", builtin_font_add_sprite_ext);

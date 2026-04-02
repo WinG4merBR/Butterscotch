@@ -362,7 +362,7 @@ int main(int argc, char* argv[]) {
         args.dataWinPath,
         (DataWinParserOptions) {
             .parseGen8 = true,
-            .parseOptn = true,
+            .parseOptn = false,
             .parseLang = true,
             .parseExtn = true,
             .parseSond = true,

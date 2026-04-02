@@ -1299,6 +1299,7 @@ void Runner_step(Runner* runner) {
 
     // Handle room transition
     if (runner->pendingRoom >= 0) {
+        runner->audioSystem->vtable->stopAll(runner->audioSystem);
         int32_t oldRoomIndex = runner->currentRoomIndex;
         Room* oldRoom = runner->currentRoom;
         const char* oldRoomName = oldRoom->name;
