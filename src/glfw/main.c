@@ -104,6 +104,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->screenshotFrames = nullptr;
     args->exitAtFrame = -1;
     args->speedMultiplier = 1.0;
+    args->renderer = "gl";
 
     int opt;
     while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1) {
