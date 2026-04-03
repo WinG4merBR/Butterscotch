@@ -454,7 +454,7 @@ void Runner_draw(Runner* runner) {
         } else if (d->type == DRAWABLE_LAYER)
         {
             if(!d->layer->visible) continue;
-            if(d->layer->type == RoomLayerType_Assets)
+            if(d->layer->type == ROOM_LAYER_TYPE_ASSETS)
             {
                 RoomLayerAssetsData* data = d->layer->assetsData;
                 repeat(data->legacyTileCount, i)
@@ -510,7 +510,7 @@ void Runner_draw(Runner* runner) {
                             1.0);
                     }
                 }
-            } else if(d->layer->type == RoomLayerType_Background) {
+            } else if(d->layer->type == ROOM_LAYER_TYPE_BACKGROUND) {
                 if (runner->renderer == nullptr) return;
                     DataWin* dataWin = runner->dataWin;
                     float roomW = (float) runner->currentRoom->width;
@@ -534,7 +534,7 @@ void Runner_draw(Runner* runner) {
                             // Single placement
                             runner->renderer->vtable->drawSprite(runner->renderer, tpagIndex, d->layer->xOffset, d->layer->yOffset, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0xFFFFFF, 1.0);
                         }
-            } else if(d->layer->type == RoomLayerType_Instances) {
+            } else if(d->layer->type == ROOM_LAYER_TYPE_INSTANCES) {
                 RoomLayerInstancesData *data = d->layer->instancesData;
                 // TODO: This isn't the right way to do this
                 repeat(data->instanceCount, i) {

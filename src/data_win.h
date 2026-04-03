@@ -511,15 +511,15 @@ typedef struct {
     uint32_t color;
 } RoomTile;
 
-enum RoomLayerType : uint32_t
+enum RoomLayerType
 {
-    RoomLayerType_Path = 0,
-    RoomLayerType_Background = 1,
-    RoomLayerType_Instances = 2,
-    RoomLayerType_Assets = 3,
-    RoomLayerType_Tiles = 4,
-    RoomLayerType_Effect = 6,
-    RoomLayerType_Path2 = 7
+    ROOM_LAYER_TYPE_PATH = 0,
+    ROOM_LAYER_TYPE_BACKGROUND = 1,
+    ROOM_LAYER_TYPE_INSTANCES = 2,
+    ROOM_LAYER_TYPE_ASSETS = 3,
+    ROOM_LAYER_TYPE_TILES = 4,
+    ROOM_LAYER_TYPE_EFFECT = 6,
+    ROOM_LAYER_TYPE_PATH2 = 7
 };
 
 typedef struct {

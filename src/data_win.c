@@ -1128,10 +1128,10 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                         layer->vSpeed = BinaryReader_readFloat32(reader);
                         layer->visible = BinaryReader_readBool32(reader);
                         switch (layer->type) {
-                            case RoomLayerType_Path:
+                            case ROOM_LAYER_TYPE_PATH:
                                 break; // Nothing to do;
                             
-                            case RoomLayerType_Assets: {
+                            case ROOM_LAYER_TYPE_ASSETS: {
                                 RoomLayerAssetsData* assets = malloc(sizeof(RoomLayerAssetsData));
                                 uint32_t legacyTilesPtr = BinaryReader_readUint32(reader);
                                 uint32_t spritesPtr = BinaryReader_readUint32(reader);
@@ -1192,7 +1192,7 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                                 break;
                             }
 
-                            case RoomLayerType_Background: {
+                            case ROOM_LAYER_TYPE_BACKGROUND: {
                                 RoomLayerBackgroundData* bg = malloc(sizeof(RoomLayerBackgroundData));
                                 bg->visible = BinaryReader_readBool32(reader);
                                 bg->foreground = BinaryReader_readBool32(reader);
@@ -1207,7 +1207,7 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                                 layer->backgroundData = bg;
                                 break;
                             }
-                            case RoomLayerType_Instances: {
+                            case ROOM_LAYER_TYPE_INSTANCES: {
                                 RoomLayerInstancesData* inst = malloc(sizeof(RoomLayerInstancesData));
                                 inst->instanceCount = BinaryReader_readUint32(reader);
                                 if (inst->instanceCount > 0) {
