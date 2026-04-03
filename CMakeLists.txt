@@ -3,7 +3,6 @@ project(butterscotch C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-# add_compile_options(-Wall -Wextra)
 
 option(DTL_SUPPORT "Support Sony DTL PS2 development kits." OFF)
 option(DISABLE_AUDIO "Disable the PS2 audio system" OFF)
@@ -43,6 +42,8 @@ endif()
 if(DTL_SUPPORT)
     target_compile_definitions(butterscotch PRIVATE DTL_SUPPORT)
 endif()
+
+target_compile_options(butterscotch PRIVATE -O2 -G8 -mno-abicalls -mno-shared)
 
 if(PS2)
     # Compiling on the Docker container
