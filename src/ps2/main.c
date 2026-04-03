@@ -20,7 +20,7 @@
 #include "../data_win.h"
 #include "../json_reader.h"
 #include "ps2_file_system.h"
-#ifndef DISABLE_PS2_AUDIO
+#ifndef DISABLE_AUDIO
 #include "ps2_audio_system.h"
 #endif
 #include "gs_renderer.h"
@@ -51,12 +51,12 @@ static uint16_t prevButtons = 0xFFFF; // All buttons released (buttons are activ
 static void initIop() {
     SifInitRpc(0);
 
-#if defined(PS2_DTL_SUPPORT)
+#if defined(DTL_SUPPORT)
     // Required to get console output on DTL systems.
     while (!SifIopReset("rom0:UDNL", 0));
 #else
     while (!SifIopReset("", 0));
-#endif // PS2_DTL_SUPPORT
+#endif // DTL_SUPPORT
 
     while (!SifIopSync());
     SifInitRpc(0);
@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
     padInit(0);
     padPortOpen(0, 0, padBuf);
 
-#ifndef DISABLE_PS2_AUDIO
+#ifndef DISABLE_AUDIO
     // ===[ Load Audio IOP Modules ]===
     ret = SifExecModuleBuffer(freesd_irx, size_freesd_irx, 0, nullptr, nullptr);
     if (0 > ret) {
@@ -267,7 +267,7 @@ int main(int argc, char* argv[]) {
     runner->renderer = renderer;
 
     // ===[ Initialize Audio System ]===
-#ifndef DISABLE_PS2_AUDIO
+#ifndef DISABLE_AUDIO
     fprintf(stderr, "Initializing audio...\n");
     Ps2AudioSystem* ps2Audio = Ps2AudioSystem_create();
     AudioSystem* audioSystem = (AudioSystem*) ps2Audio;

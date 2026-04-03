@@ -13,10 +13,10 @@ IMPORT_BIN2C(mcserv_irx);
 
 IMPORT_BIN2C(padman_irx);
 
-#ifndef DISABLE_PS2_AUDIO
+#ifndef DISABLE_AUDIO
 
 IMPORT_BIN2C(freesd_irx);
 
 IMPORT_BIN2C(audsrv_irx);
 
-#endif // DISABLE_PS2_AUDIO
+#endif // DISABLE_AUDIO
