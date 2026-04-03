@@ -1,5 +1,4 @@
 #include "vm.h"
-#include "vm_builtins.h"
 #include "instance.h"
 #include "runner.h"
 #include "binary_utils.h"
@@ -9,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#include "ps2/vm_builtins.h"
 
 #include "stb_ds.h"
 

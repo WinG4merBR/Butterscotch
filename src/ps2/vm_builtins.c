@@ -1,4 +1,5 @@
-#include "vm_builtins.h"
+#include "ps2/vm_builtins.h"
+
 #include "instance.h"
 #include "json_reader.h"
 #include "runner.h"
@@ -10,9 +11,6 @@
 #include <math.h>
 #include <ctype.h>
 #include <time.h>
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 #include "rvalue.h"
 #include "stb_ds.h"
@@ -372,16 +370,9 @@ RValue VMBuiltins_getVariable(VMContext* ctx, const char* name, int32_t arrayInd
 
     // Timing
     if (strcmp(name, "current_time") == 0) {
-        #ifdef _WIN32
-        LARGE_INTEGER freq, counter;
-        QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&counter);
-        GMLReal ms = (GMLReal) counter.QuadPart / (GMLReal) freq.QuadPart * 1000.0;
-        #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
         GMLReal ms = (GMLReal) ts.tv_sec * 1000.0 + (GMLReal) ts.tv_nsec / 1000000.0;
-        #endif
         return RValue_makeReal(ms);
     }
 
