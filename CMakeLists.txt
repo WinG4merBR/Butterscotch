@@ -149,46 +149,6 @@ elseif(PLATFORM STREQUAL "ps2")
             target_sources(butterscotch PRIVATE ${IRX_GEN_DIR}/freesd_irx.c ${IRX_GEN_DIR}/audsrv_irx.c)
         endif()
         target_include_directories(butterscotch PRIVATE ${IRX_GEN_DIR})
-
-        # ===[ gprof Profiling Support ]===
-        option(ENABLE_GPROF_PROFILING "Enable gprof profiling for PS2" OFF)
-        if(ENABLE_GPROF_PROFILING)
-            add_compile_definitions(GPROF_PROFILING)
-            target_compile_options(butterscotch PRIVATE -pg)
-            target_link_options(butterscotch PRIVATE -pg)
-
-            # Embed USB mass storage IRX modules for writing gmon.out when not running from host:
-            add_custom_command(
-                OUTPUT ${IRX_GEN_DIR}/usbd_irx.c
-                COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/usbd.irx ${IRX_GEN_DIR}/usbd_irx.c usbd_irx
-                DEPENDS ${IRX_DIR}/usbd.irx
-                COMMENT "Embedding usbd.irx (profiler)"
-            )
-            add_custom_command(
-                OUTPUT ${IRX_GEN_DIR}/bdm_irx.c
-                COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/bdm.irx ${IRX_GEN_DIR}/bdm_irx.c bdm_irx
-                DEPENDS ${IRX_DIR}/bdm.irx
-                COMMENT "Embedding bdm.irx (profiler)"
-            )
-            add_custom_command(
-                OUTPUT ${IRX_GEN_DIR}/bdmfs_fatfs_irx.c
-                COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/bdmfs_fatfs.irx ${IRX_GEN_DIR}/bdmfs_fatfs_irx.c bdmfs_fatfs_irx
-                DEPENDS ${IRX_DIR}/bdmfs_fatfs.irx
-                COMMENT "Embedding bdmfs_fatfs.irx (profiler)"
-            )
-            add_custom_command(
-                OUTPUT ${IRX_GEN_DIR}/usbmass_bd_irx.c
-                COMMAND $ENV{PS2SDK}/bin/bin2c ${IRX_DIR}/usbmass_bd.irx ${IRX_GEN_DIR}/usbmass_bd_irx.c usbmass_bd_irx
-                DEPENDS ${IRX_DIR}/usbmass_bd.irx
-                COMMENT "Embedding usbmass_bd.irx (profiler)"
-            )
-            target_sources(butterscotch PRIVATE
-                ${IRX_GEN_DIR}/usbd_irx.c
-                ${IRX_GEN_DIR}/bdm_irx.c
-                ${IRX_GEN_DIR}/bdmfs_fatfs_irx.c
-                ${IRX_GEN_DIR}/usbmass_bd_irx.c
-            )
-        endif()
     else()
         # This block is for when we are developing Butterscotch with CLion!
         # ps2sdk and gsKit scatter headers across per-module subdirectories;
