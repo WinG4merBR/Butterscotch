@@ -8,12 +8,6 @@
 typedef struct {
     Renderer base; // Must be first field for struct embedding
 
-    float* vertexData; // MAX_QUADS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX floats
-    float* indiceData;
-
-    int32_t quadCount;
-    GLuint currentTextureId;
-
     GLuint* glTextures;       // one GL texture per TXTR page
     int32_t* textureWidths;   // needed for UV normalization
     int32_t* textureHeights;
