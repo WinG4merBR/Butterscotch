@@ -204,7 +204,7 @@ jobs:
             echo "date=$(git log -1 --format=%cd --date=short)" >> $GITHUB_OUTPUT
 
         - name: Configure
-          run: cmake -B build -DPLATFORM=ps3 -DCMAKE_TOOLCHAIN_FILE=ppu.cmake -DCMAKE_BUILD_TYPE=Release -DINTERPROCEDURAL_OPTIMIZATION=ON -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON "-DBUTTERSCOTCH_COMMIT_HASH=${{ steps.commit-info.outputs.hash }}" "-DBUTTERSCOTCH_COMMIT_DATE=${{ steps.commit-info.outputs.date }}"
+          run: cmake -B build -DPLATFORM=ps3 -DCMAKE_TOOLCHAIN_FILE=ppu.cmake -DCMAKE_BUILD_TYPE=Release "-DBUTTERSCOTCH_COMMIT_HASH=${{ steps.commit-info.outputs.hash }}" "-DBUTTERSCOTCH_COMMIT_DATE=${{ steps.commit-info.outputs.date }}"
 
         - name: Build
           run: |
