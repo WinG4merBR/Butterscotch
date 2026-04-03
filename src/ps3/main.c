@@ -153,6 +153,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        /*
         if (RunnerKeyboard_checkPressed(runner->keyboard, VK_PAGEDOWN)) {
             DataWin* dw = runner->dataWin;
             forEachIndexed(Room, room, i, dw->room.rooms, dw->room.count) {
@@ -186,7 +187,8 @@ int main(int argc, char* argv[]) {
                     break;
                 }
             }
-            }
+        }
+        */
 
         // Run one game step (Begin Step, Keyboard, Alarms, Step, End Step, room transitions)
         Runner_step(runner);
