@@ -546,6 +546,7 @@ static void parseSPRT(BinaryReader* reader, DataWin* dw, bool skipLoadingPrecise
                 }
             } else {
                 BinaryReader_skip(reader, bytesPerMask * maskDataCount);
+                spr->masks = nullptr;
             }
             // Pad the TOTAL mask data to 4-byte alignment (not per-mask)
             uint32_t totalMaskBytes = bytesPerMask * maskDataCount;
