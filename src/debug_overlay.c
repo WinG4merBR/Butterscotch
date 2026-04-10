@@ -25,7 +25,7 @@ void DebugOverlay_drawCollisionMasks(Runner* runner) {
         Sprite* spr = Collision_getSprite(dataWin, inst);
         if (spr == nullptr) continue;
 
-        bool hasPreciseMask = (spr->sepMasks == 1 && spr->masks != nullptr && spr->maskCount > 0);
+        bool hasPreciseMask = Collision_hasFrameMasks(spr);
 
         // Draw the precise mask pixels (only when not rotated, to keep this simple)
         if (hasPreciseMask && 0.0001 > GMLReal_fabs(inst->imageAngle)) {
