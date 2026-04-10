@@ -1206,8 +1206,16 @@ static int32_t ps2CreateStream(AudioSystem* audio, const char* filename) {
     return -1;
 }
 
-static bool ps2DestroyStream(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED int32_t streamIndex) {
-    // Nothing to clean up, MUS entries are static
+static bool ps2DestroyStream(AudioSystem* audio, int32_t streamIndex) {
+    Ps2AudioSystem* ps2 = (Ps2AudioSystem*) audio;
+
+    // Stop all music streams that were playing this stream
+    repeat(MAX_MUSIC_STREAMS, i) {
+        if (ps2->musicStreams[i].active && ps2->musicStreams[i].soundIndex == streamIndex) {
+            ps2->musicStreams[i].active = false;
+        }
+    }
+
     return true;
 }
 
