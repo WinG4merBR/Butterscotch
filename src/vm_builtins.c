@@ -2250,8 +2250,9 @@ static RValue builtin_audioSoundSetTrackPosition(VMContext* ctx, RValue* args, M
 static RValue builtin_audioCreateStream(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = getAudioSystem(ctx);
     if (audio == nullptr) return RValue_makeReal(-1.0);
-    const char* filename = RValue_toString(args[0]);
+    char* filename = RValue_toString(args[0]);
     int32_t streamIndex = audio->vtable->createStream(audio, filename);
+    free(filename);
     return RValue_makeReal((GMLReal) streamIndex);
 }
 
@@ -4693,13 +4694,16 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
         return RValue_makeUndefined();
     }
 
-    const char* name = RValue_toString(args[0]);
+    char* name = RValue_toString(args[0]);
 
     repeat(ctx->dataWin->objt.count, i) {
-        if (strcmp(ctx->dataWin->objt.objects[i].name, name) == 0)
+        if (strcmp(ctx->dataWin->objt.objects[i].name, name) == 0) {
+            free(name);
             return RValue_makeReal((double) i);
+        }
     }
 
+    free(name);
     return RValue_makeReal((double) -1);
 }
 
@@ -5093,4 +5097,33 @@ void VMBuiltins_registerAll(bool isGMS2) {
     registerBuiltin("font_add_sprite_ext", builtinFontAddSpriteExt);
     registerBuiltin("object_get_sprite", builtinObjectGetSprite);
     registerBuiltin("asset_get_index", builtinAssetGetIndex);
+}
+
+void VMBuiltins_free(void) {
+    // Free ds_map pool
+    repeat((int32_t) arrlen(dsMapPool), i) {
+        DsMapEntry* map = dsMapPool[i];
+        if (map != nullptr) {
+            repeat(shlen(map), j) {
+                free(map[j].key);
+                RValue_free(&map[j].value);
+            }
+            shfree(map);
+        }
+    }
+    arrfree(dsMapPool);
+
+    // Free ds_list pool
+    repeat((int32_t) arrlen(dsListPool), i) {
+        DsList* list = &dsListPool[i];
+        repeat(arrlen(list->items), j) {
+            RValue_free(&list->items[j]);
+        }
+        arrfree(list->items);
+    }
+    arrfree(dsListPool);
+
+    // Free builtin map
+    shfree(builtinMap);
+    initialized = false;
 }

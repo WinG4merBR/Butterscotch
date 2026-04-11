@@ -1745,6 +1745,11 @@ void DataWin_free(DataWin* dw) {
 
 
     // BGND
+    if (dw->bgnd.backgrounds) {
+        repeat(dw->bgnd.count, i) {
+            free(dw->bgnd.backgrounds[i].gms2TileIds);
+        }
+    }
     free(dw->bgnd.backgrounds);
 
     // PATH

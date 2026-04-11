@@ -663,6 +663,8 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
         }
 #endif
 
+        // VMBuiltins_setVariable reads values (toReal, toInt32, etc.) but does not take ownership
+        RValue_free(&val);
         return;
     }
 
@@ -768,7 +770,8 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
                 free(rvalueAsString);
             }
 #endif
-            // val ownership transferred to Instance_setSelfVar, don't free here
+            // Instance_setSelfVar always copies strings, so free the original
+            RValue_free(&val);
             return;
         }
     }
@@ -2675,7 +2678,15 @@ void VM_free(VMContext* ctx) {
     // Free hash maps
     shfree(ctx->funcMap);
     shfree(ctx->globalVarNameMap);
+
+    // Free dedup key strings before freeing the hashmaps
+    for (ptrdiff_t i = 0; shlen(ctx->loggedUnknownFuncs) > i; i++) {
+        free(ctx->loggedUnknownFuncs[i].key);
+    }
     shfree(ctx->loggedUnknownFuncs);
+    for (ptrdiff_t i = 0; shlen(ctx->loggedStubbedFuncs) > i; i++) {
+        free(ctx->loggedStubbedFuncs[i].key);
+    }
     shfree(ctx->loggedStubbedFuncs);
 #ifndef DISABLE_VM_TRACING
     shfree(ctx->varReadsToBeTraced);

@@ -669,13 +669,11 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
     GlFontState fontState;
     if (!glResolveFontState(gl, dw, font, &fontState)) return;
 
-    // Preprocess: convert # to \n (and \# to literal #)
-    char* processed = TextUtils_preprocessGmlText(text);
-    int32_t textLen = (int32_t) strlen(processed);
+    int32_t textLen = (int32_t) strlen(text);
     if(textLen == 0) return;
 
     // Count lines, treating \r\n and \n\r as single breaks
-    int32_t lineCount = TextUtils_countLines(processed, textLen);
+    int32_t lineCount = TextUtils_countLines(text, textLen);
 
     // Vertical alignment offset
     float totalHeight = (float) lineCount * (float) font->emSize;
@@ -714,13 +712,13 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
     for (int32_t lineIdx = 0; lineCount > lineIdx; lineIdx++) {
         // Find end of current line
         int32_t lineEnd = lineStart;
-        while (textLen > lineEnd && !TextUtils_isNewlineChar(processed[lineEnd])) {
+        while (textLen > lineEnd && !TextUtils_isNewlineChar(text[lineEnd])) {
             lineEnd++;
         }
         int32_t lineLen = lineEnd - lineStart;
 
         // Horizontal alignment offset for this line
-        float lineWidth = TextUtils_measureLineWidth(font, processed + lineStart, lineLen);
+        float lineWidth = TextUtils_measureLineWidth(font, text + lineStart, lineLen);
         float halignOffset = 0;
         if (renderer->drawHalign == 1) halignOffset = -lineWidth / 2.0f;
         else if (renderer->drawHalign == 2) halignOffset = -lineWidth;
@@ -745,7 +743,7 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
             right_delta_g += right_g_dx;
             right_delta_b += right_b_dx;
 
-            uint16_t ch = TextUtils_decodeUtf8(processed + lineStart, lineLen, &pos);
+            uint16_t ch = TextUtils_decodeUtf8(text + lineStart, lineLen, &pos);
             FontGlyph* glyph = TextUtils_findGlyph(font, ch);
             if (glyph == nullptr) continue;
             if (glyph->sourceWidth == 0 || glyph->sourceHeight == 0) {
@@ -798,7 +796,7 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
             cursorX += glyph->shift;
             if (lineLen > pos) {
                 int32_t savedPos = pos;
-                uint16_t nextCh = TextUtils_decodeUtf8(processed + lineStart, lineLen, &pos);
+                uint16_t nextCh = TextUtils_decodeUtf8(text + lineStart, lineLen, &pos);
                 pos = savedPos;
                 cursorX += TextUtils_getKerningOffset(glyph, nextCh);
             }
@@ -809,13 +807,11 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
         cursorY += (float) font->emSize;
         // Skip past the newline, treating \r\n and \n\r as single breaks
         if (textLen > lineEnd) {
-            lineStart = TextUtils_skipNewline(processed, lineEnd, textLen);
+            lineStart = TextUtils_skipNewline(text, lineEnd, textLen);
         } else {
             lineStart = lineEnd;
         }
     }
-
-    free(processed);
 }
 
 // ===[ Dynamic Sprite Creation/Deletion ]===

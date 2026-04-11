@@ -425,6 +425,7 @@ void Runner_draw(Runner* runner) {
             Drawable d = { .type = DRAWABLE_LAYER, .depth = layerDrawList[i]->depth, .layer = layerDrawList[i] };
             arrput(drawables, d);
         }
+        arrfree(layerDrawList);
     }
 
     // Sort all drawables by depth
@@ -1845,6 +1846,7 @@ void Runner_free(Runner* runner) {
         free(runner->savedRoomStates);
     }
 
+    hmfree(runner->instancesToId);
     hmfree(runner->tileLayerMap);
     shfree(runner->disabledObjects);
     RunnerKeyboard_free(runner->keyboard);
