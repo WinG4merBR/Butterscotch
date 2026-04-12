@@ -4522,7 +4522,17 @@ static RValue builtinStringHashToNewline(MAYBE_UNUSED VMContext* ctx, RValue* ar
         return RValue_makeOwnedString(RValue_toString(original));
     }
 
-    char *result = TextUtils_preprocessGmlText(original.string != nullptr ? original.string : "");
+    if (original.string == nullptr) {
+        // Fast path: If the argument is a string but has no value, return an empty string
+        return RValue_makeString("");
+    }
+
+    if (strchr(original.string, '#') == nullptr) {
+        // Fast path: if there isn't a "#" in the string, we can return a non-owning reference to avoid copying the string
+        return RValue_makeString(original.string);
+    }
+
+    char *result = TextUtils_preprocessGmlText(original.string);
     return RValue_makeOwnedString(result);
 }
 
