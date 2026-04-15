@@ -58,6 +58,7 @@ void Instance_free(Instance* instance);
 
 // Get a self variable by varID. Returns RVALUE_UNDEFINED if absent. The returned RValue is non-owning.
 static inline RValue Instance_getSelfVar(Instance* inst, int32_t varID) {
+    requireNotNull(inst);
     ptrdiff_t idx = hmgeti(inst->selfVars, varID);
     if (0 > idx) return (RValue){ .type = RVALUE_UNDEFINED };
     RValue result = inst->selfVars[idx].value;
@@ -67,6 +68,7 @@ static inline RValue Instance_getSelfVar(Instance* inst, int32_t varID) {
 
 // Set a self variable by varID. Frees the old value if present, makes an owning string copy if needed.
 static inline void Instance_setSelfVar(Instance* inst, int32_t varID, RValue val) {
+    requireNotNull(inst);
     ptrdiff_t idx = hmgeti(inst->selfVars, varID);
     if (idx >= 0) {
         RValue_free(&inst->selfVars[idx].value);
