@@ -386,6 +386,13 @@ static ArrayAccess popArrayAccess(VMContext* ctx, uint32_t varRef) {
         RValue stacktop = stackPop(ctx);
         int32_t instanceType = RValue_toInt32(stacktop);
         RValue_free(&stacktop);
+        // BC17: PushI.e -9 (INSTANCE_STACKTOP) is pushed before the Pop instruction.
+        // When we pop -9, it means "the real instance type is the next item on the stack".
+        if (instanceType == INSTANCE_STACKTOP) {
+            RValue realInst = stackPop(ctx);
+            instanceType = RValue_toInt32(realInst);
+            RValue_free(&realInst);
+        }
         return (ArrayAccess){ .arrayIndex = -1, .isArray = false, .hasInstanceType = true, .instanceType = instanceType };
     }
     return (ArrayAccess){ .arrayIndex = -1, .isArray = false, .hasInstanceType = false };
@@ -1138,6 +1145,12 @@ static void handlePop(VMContext* ctx, uint32_t instr, const uint8_t* extraData) 
         RValue instTypeVal = stackPop(ctx);
         instanceType = RValue_toInt32(instTypeVal);
         RValue_free(&instTypeVal);
+        // BC17: -9 (INSTANCE_STACKTOP) means "pop again for the real instance type"
+        if (instanceType == INSTANCE_STACKTOP) {
+            RValue realInst = stackPop(ctx);
+            instanceType = RValue_toInt32(realInst);
+            RValue_free(&realInst);
+        }
 
         val = stackPop(ctx);
 
