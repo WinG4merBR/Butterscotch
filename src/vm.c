@@ -1502,6 +1502,12 @@ static void handleConv(VMContext* ctx, uint32_t instr) {
         case 0x23: result = RValue_makeInt32((int32_t) val.int64); break;
         case 0x43: result = RValue_makeBool(val.int64 > 0); break;
         case 0x53: result = val; break; // Int64 -> Variable (passthrough)
+#else
+        // Int64 (3) -> other (Int64 stored as Int32 when NO_RVALUE_INT64)
+        case 0x03: result = RValue_makeReal((GMLReal) val.int32); break;
+        case 0x23: result = val; break; // Already Int32
+        case 0x43: result = RValue_makeBool(val.int32 > 0); break;
+        case 0x53: result = val; break; // Int64 -> Variable (passthrough)
 #endif
 
         // Bool (4) -> other
