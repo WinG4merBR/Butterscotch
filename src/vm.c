@@ -56,6 +56,11 @@ static void stackPush(VMContext* ctx, RValue val) {
     ctx->stack.slots[ctx->stack.top++] = val;
 }
 
+static void stackPushTyped(VMContext* ctx, RValue val, uint8_t gmlStackType) {
+    val.gmlStackType = gmlStackType;
+    stackPush(ctx, val);
+}
+
 static RValue stackPop(VMContext* ctx) {
     require(ctx->stack.top > 0);
     RValue val = ctx->stack.slots[--ctx->stack.top];
@@ -1306,7 +1311,8 @@ static void handlePopz(VMContext* ctx) {
     RValue_free(&val);
 }
 
-static void handleAdd(VMContext* ctx) {
+static void handleAdd(VMContext* ctx, uint32_t instr) {
+    uint8_t resultType = instrType2(instr);
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
 
@@ -1321,7 +1327,7 @@ static void handleAdd(VMContext* ctx) {
         memcpy(result + lenA, sb, lenB + 1);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx,RValue_makeOwnedString(result));
+        stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
     } else if (a.type == RVALUE_STRING || b.type == RVALUE_STRING) {
         // String + Number: convert both to strings and concatenate (GMS behavior)
         char* sa = RValue_toString(a);
@@ -1335,39 +1341,41 @@ static void handleAdd(VMContext* ctx) {
         free(sb);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx,RValue_makeOwnedString(result));
+        stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
     } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPush(ctx, RValue_makeInt32(a.int32 + b.int32));
+        stackPushTyped(ctx, RValue_makeInt32(a.int32 + b.int32), resultType);
 #ifndef NO_RVALUE_INT64
     } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPush(ctx, RValue_makeInt64(a.int64 + b.int64));
+        stackPushTyped(ctx, RValue_makeInt64(a.int64 + b.int64), resultType);
 #endif
     } else {
         GMLReal result = RValue_toReal(a) + RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx, RValue_makeReal(result));
+        stackPushTyped(ctx, RValue_makeReal(result), resultType);
     }
 }
 
-static void handleSub(VMContext* ctx) {
+static void handleSub(VMContext* ctx, uint32_t instr) {
+    uint8_t resultType = instrType2(instr);
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
     if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPush(ctx, RValue_makeInt32(a.int32 - b.int32));
+        stackPushTyped(ctx, RValue_makeInt32(a.int32 - b.int32), resultType);
 #ifndef NO_RVALUE_INT64
     } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPush(ctx, RValue_makeInt64(a.int64 - b.int64));
+        stackPushTyped(ctx, RValue_makeInt64(a.int64 - b.int64), resultType);
 #endif
     } else {
         GMLReal result = RValue_toReal(a) - RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx, RValue_makeReal(result));
+        stackPushTyped(ctx, RValue_makeReal(result), resultType);
     }
 }
 
-static void handleMul(VMContext* ctx) {
+static void handleMul(VMContext* ctx, uint32_t instr) {
+    uint8_t resultType = instrType2(instr);
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
 
@@ -1379,7 +1387,7 @@ static void handleMul(VMContext* ctx) {
         if (count <= 0 || len == 0) {
             RValue_free(&a);
             RValue_free(&b);
-            stackPush(ctx,RValue_makeOwnedString(safeStrdup("")));
+            stackPushTyped(ctx, RValue_makeOwnedString(safeStrdup("")), resultType);
         } else {
             char* result = safeMalloc(len * count + 1);
             repeat(count, i) {
@@ -1388,23 +1396,23 @@ static void handleMul(VMContext* ctx) {
             result[len * count] = '\0';
             RValue_free(&a);
             RValue_free(&b);
-            stackPush(ctx,RValue_makeOwnedString(result));
+            stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
         }
     } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPush(ctx, RValue_makeInt32(a.int32 * b.int32));
+        stackPushTyped(ctx, RValue_makeInt32(a.int32 * b.int32), resultType);
 #ifndef NO_RVALUE_INT64
     } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPush(ctx, RValue_makeInt64(a.int64 * b.int64));
+        stackPushTyped(ctx, RValue_makeInt64(a.int64 * b.int64), resultType);
 #endif
     } else {
         GMLReal result = RValue_toReal(a) * RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPush(ctx, RValue_makeReal(result));
+        stackPushTyped(ctx, RValue_makeReal(result), resultType);
     }
 }
 
-static void handleDiv(VMContext* ctx) {
+static void handleDiv(VMContext* ctx, uint32_t instr) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
     GMLReal divisor = RValue_toReal(b);
@@ -1415,10 +1423,10 @@ static void handleDiv(VMContext* ctx) {
     GMLReal result = RValue_toReal(a) / divisor;
     RValue_free(&a);
     RValue_free(&b);
-    stackPush(ctx,RValue_makeReal(result));
+    stackPushTyped(ctx, RValue_makeReal(result), instrType2(instr));
 }
 
-static void handleRem(VMContext* ctx) {
+static void handleRem(VMContext* ctx, uint32_t instr) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
     int32_t ib = RValue_toInt32(b);
@@ -1429,10 +1437,10 @@ static void handleRem(VMContext* ctx) {
     int32_t result = RValue_toInt32(a) % ib;
     RValue_free(&a);
     RValue_free(&b);
-    stackPush(ctx,RValue_makeInt32(result));
+    stackPushTyped(ctx, RValue_makeInt32(result), instrType2(instr));
 }
 
-static void handleMod(VMContext* ctx) {
+static void handleMod(VMContext* ctx, uint32_t instr) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
     GMLReal divisor = RValue_toReal(b);
@@ -1443,7 +1451,7 @@ static void handleMod(VMContext* ctx) {
     GMLReal result = GMLReal_fmod(RValue_toReal(a), divisor);
     RValue_free(&a);
     RValue_free(&b);
-    stackPush(ctx,RValue_makeReal(result));
+    stackPushTyped(ctx, RValue_makeReal(result), instrType2(instr));
 }
 
 #define SIMPLE_BYTECODE_BITWISE_OPERATION(op) \
@@ -1452,48 +1460,48 @@ static void handleMod(VMContext* ctx) {
     int32_t result = RValue_toInt32(a) op RValue_toInt32(b); \
     RValue_free(&a); \
     RValue_free(&b); \
-    stackPush(ctx,RValue_makeInt32(result))
+    stackPushTyped(ctx, RValue_makeInt32(result), instrType2(instr))
 
-static void handleAnd(VMContext* ctx) {
+static void handleAnd(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(&);
 }
 
-static void handleOr(VMContext* ctx) {
+static void handleOr(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(|);
 }
 
-static void handleXor(VMContext* ctx) {
+static void handleXor(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(^);
 }
 
-static void handleNeg(VMContext* ctx) {
+static void handleNeg(VMContext* ctx, uint32_t instr) {
     RValue a = stackPop(ctx);
     GMLReal result = -RValue_toReal(a);
     RValue_free(&a);
-    stackPush(ctx,RValue_makeReal(result));
+    stackPushTyped(ctx, RValue_makeReal(result), instrType1(instr));
 }
 
 static void handleNot(VMContext* ctx, uint32_t instr) {
+    uint8_t resultType = instrType1(instr);
     RValue a = stackPop(ctx);
-    uint8_t type1 = instrType1(instr);
-    if (GML_TYPE_BOOL == type1) {
+    if (GML_TYPE_BOOL == resultType) {
         // Logical NOT: compiler emits this for the ! operator on boolean expressions
         int32_t result = (RValue_toInt32(a) == 0) ? 1 : 0;
         RValue_free(&a);
-        stackPush(ctx,RValue_makeBool(result != 0));
+        stackPushTyped(ctx, RValue_makeBool(result != 0), resultType);
     } else {
         // Bitwise NOT: used for ~ operator on integer types
         int32_t result = ~RValue_toInt32(a);
         RValue_free(&a);
-        stackPush(ctx,RValue_makeInt32(result));
+        stackPushTyped(ctx, RValue_makeInt32(result), resultType);
     }
 }
 
-static void handleShl(VMContext* ctx) {
+static void handleShl(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(<<);
 }
 
-static void handleShr(VMContext* ctx) {
+static void handleShr(VMContext* ctx, uint32_t instr) {
     SIMPLE_BYTECODE_BITWISE_OPERATION(>>);
 }
 
@@ -2218,22 +2226,22 @@ static RValue executeLoop(VMContext* ctx) {
                 break;
 
             // Arithmetic
-            case OP_ADD: handleAdd(ctx); break;
-            case OP_SUB: handleSub(ctx); break;
-            case OP_MUL: handleMul(ctx); break;
-            case OP_DIV: handleDiv(ctx); break;
-            case OP_REM: handleRem(ctx); break;
-            case OP_MOD: handleMod(ctx); break;
+            case OP_ADD: handleAdd(ctx, instr); break;
+            case OP_SUB: handleSub(ctx, instr); break;
+            case OP_MUL: handleMul(ctx, instr); break;
+            case OP_DIV: handleDiv(ctx, instr); break;
+            case OP_REM: handleRem(ctx, instr); break;
+            case OP_MOD: handleMod(ctx, instr); break;
 
             // Bitwise / Logical
-            case OP_AND: handleAnd(ctx); break;
-            case OP_OR:  handleOr(ctx); break;
-            case OP_XOR: handleXor(ctx); break;
-            case OP_SHL: handleShl(ctx); break;
-            case OP_SHR: handleShr(ctx); break;
+            case OP_AND: handleAnd(ctx, instr); break;
+            case OP_OR:  handleOr(ctx, instr);  break;
+            case OP_XOR: handleXor(ctx, instr); break;
+            case OP_SHL: handleShl(ctx, instr); break;
+            case OP_SHR: handleShr(ctx, instr); break;
 
             // Unary
-            case OP_NEG: handleNeg(ctx); break;
+            case OP_NEG: handleNeg(ctx, instr); break;
             case OP_NOT: handleNot(ctx, instr); break;
 
             // Type conversion
