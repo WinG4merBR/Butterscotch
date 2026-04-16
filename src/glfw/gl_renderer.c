@@ -86,6 +86,11 @@ static void flushBatch(GLRenderer* gl) {
     int32_t vertexCount = gl->quadCount * VERTICES_PER_QUAD;
     int32_t indexCount = gl->quadCount * INDICES_PER_QUAD;
 
+    // Bind the VAO so the EBO binding it carries is what glDrawElements uses.
+    // Without this, glDrawElements would treat the nullptr indices arg as a literal
+    // pointer to client memory and SEGV inside the driver during async upload.
+    glBindVertexArray(gl->vao);
+
     glBindBuffer(GL_ARRAY_BUFFER, gl->vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, vertexCount * FLOATS_PER_VERTEX * sizeof(float), gl->vertexData);
 
