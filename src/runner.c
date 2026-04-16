@@ -380,7 +380,7 @@ void Runner_draw(Runner* runner) {
     }
 
     // Draw non-foreground backgrounds (behind everything)
-    if(!runner->isGMS2) 
+    if (!DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0))
         Runner_drawBackgrounds(runner, false);
  
     // Fire draw subtypes in correct GameMaker order
@@ -397,7 +397,7 @@ void Runner_draw(Runner* runner) {
     }
 
     // Add tiles (skip hidden layers)
-    if(!runner->isGMS2) {
+    if (!DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0)) {
         repeat(room->tileCount, i) {
             RoomTile* tile = &room->tiles[i];
             // Check if this tile's layer is hidden
@@ -409,7 +409,7 @@ void Runner_draw(Runner* runner) {
         }
     }
 
-    if(runner->isGMS2) {
+    if (DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0)) {
         RoomLayer** layerDrawList = nullptr;
         int32_t layerCount = (int32_t) runner->currentRoom->layerCount;
         repeat(layerCount, i) {
@@ -762,7 +762,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
 
     // In GMS2, instances get their depth from their room layer, not the object definition.
     // This must happen before firing Create events so scripts like scr_depth() read the layer depth.
-    if (runner->isGMS2) {
+    if (DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0)) {
         repeat(room->layerCount, li) {
             RoomLayer* layer = &room->layers[li];
             if (layer->type != RoomLayerType_Instances || layer->instancesData == nullptr) continue;
@@ -939,7 +939,6 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     runner->fileSystem = fileSystem;
     runner->audioSystem = audioSystem;
     runner->frameCount = 0;
-    runner->isGMS2 = (dataWin->gen8.major >= 2);
     runner->keyboard = RunnerKeyboard_create();
 
     Runner_reset(runner);

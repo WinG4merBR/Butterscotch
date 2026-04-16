@@ -5263,9 +5263,11 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
 
 // ===[ REGISTRATION ]===
 
-void VMBuiltins_registerAll(VMContext* ctx, bool isGMS2) {
+void VMBuiltins_registerAll(VMContext* ctx) {
     requireMessage(!ctx->registeredBuiltinFunctions, "Attempting to register all VMBuiltins, but it was already registered!");
     ctx->registeredBuiltinFunctions = true;
+
+    const bool isGMS2 = DataWin_isVersionAtLeast(ctx->dataWin, 2, 0, 0, 0);
 
     // Core output
     VM_registerBuiltin(ctx, "show_debug_message", builtinShowDebugMessage);

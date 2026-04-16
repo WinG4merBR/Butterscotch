@@ -263,6 +263,13 @@ static void parseGEN8(BinaryReader* reader, DataWin* dw) {
         BinaryReader_skip(reader, 4); // AllowStatistics (bool32)
         BinaryReader_skip(reader, 16); // GameGUID (16 Bytes, unknown it's use)
     }
+
+    // Seed the detected version from GEN8.
+    // Later chunk parsers may bump these upward when they identify newer-format features, because since GM:S 2 the value in the GEN8 chunk is not accurate.
+    dw->detectedFormat.major = g->major;
+    dw->detectedFormat.minor = g->minor;
+    dw->detectedFormat.release = g->release;
+    dw->detectedFormat.build = g->build;
 }
 
 static void parseOPTN(BinaryReader* reader, DataWin* dw) {
@@ -501,7 +508,7 @@ static void parseSPRT(BinaryReader* reader, DataWin* dw, bool skipLoadingPrecise
             spr->specialType = true;
             spr->sVersion = BinaryReader_readUint32(reader);
             spr->sSpriteType = BinaryReader_readUint32(reader);
-            if (dw->gen8.major >= 2) {
+            if (DataWin_isVersionAtLeast(dw, 2, 0, 0, 0)) {
                 spr->gms2PlaybackSpeed = BinaryReader_readFloat32(reader);
                 spr->gms2PlaybackSpeedType = BinaryReader_readUint32(reader);
                 if (spr->sVersion >= 2) {
@@ -585,11 +592,11 @@ static void parseBGND(BinaryReader* reader, DataWin* dw) {
         bg->smooth = BinaryReader_readBool32(reader);
         bg->preload = BinaryReader_readBool32(reader);
         bg->textureOffset = BinaryReader_readUint32(reader);
-        if (dw->gen8.major >= 2) {
+        if (DataWin_isVersionAtLeast(dw, 2, 0, 0, 0)) {
             bg->gms2UnknownAlways2 = BinaryReader_readUint32(reader);
             bg->gms2TileWidth = BinaryReader_readUint32(reader);
             bg->gms2TileHeight = BinaryReader_readUint32(reader);
-            if (dw->gen8.major >= 2024 && dw->gen8.minor >= 14 && dw->gen8.build >= 1) {
+            if (DataWin_isVersionAtLeast(dw, 2024, 14, 0, 1)) {
                 bg->gms2TileSeparationX = BinaryReader_readUint32(reader);
                 bg->gms2TileSeparationY = BinaryReader_readUint32(reader);
             }
@@ -952,6 +959,29 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
 
     if (count == 0) { free(ptrs); rc->rooms = nullptr; return; }
 
+    // Detect whether RoomGameObject includes ImageSpeed/ImageIndex fields (added in GMS 2.2.2.302).
+    // UndertaleModTool detects this via the distance between the first two game object pointers: 40 bytes = legacy format, 48 bytes = new format with ImageSpeed+ImageIndex.
+    // We skip if we already know that we are at or above 2.2.2.302.
+    if (DataWin_isVersionAtLeast(dw, 2, 0, 0, 0) && !DataWin_isVersionAtLeast(dw, 2, 2, 2, 302)) {
+        repeat(count, i) {
+            BinaryReader_seek(reader, ptrs[i]);
+            // Room header layout (before gameObjectsPtr): name, caption, width, height, speed, persistent,
+            // bgColor, drawBgColor, creationCodeId, flags, backgroundsPtr, viewsPtr = 12 uint32s.
+            BinaryReader_skip(reader, 12 * 4);
+            uint32_t gameObjectsPtr = BinaryReader_readUint32(reader);
+            BinaryReader_seek(reader, gameObjectsPtr);
+            uint32_t objCount = BinaryReader_readUint32(reader);
+            if (objCount >= 2) {
+                uint32_t firstPtr = BinaryReader_readUint32(reader);
+                uint32_t secondPtr = BinaryReader_readUint32(reader);
+                if (secondPtr - firstPtr == 48) {
+                    DataWin_bumpVersionTo(dw, 2, 2, 2, 302);
+                }
+                break;
+            }
+        }
+    }
+
     rc->rooms = safeMalloc(count * sizeof(Room));
     repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
@@ -978,15 +1008,15 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
         room->gravityX = BinaryReader_readFloat32(reader);
         room->gravityY = BinaryReader_readFloat32(reader);
         room->metersPerPixel = BinaryReader_readFloat32(reader);
-        if (dw->gen8.major >= 2024 && dw->gen8.minor >= 13) {
+        if (DataWin_isVersionAtLeast(dw, 2024, 13, 0, 0)) {
             // skip instanceCreationOrderIDs
             int count = BinaryReader_readInt32(reader);
             BinaryReader_skip(reader, sizeof(int32_t) * count);
         }
         uint32_t layersPtr = 0;
-        if (dw->gen8.major >= 2) {
+        if (DataWin_isVersionAtLeast(dw, 2, 0, 0, 0)) {
             layersPtr = BinaryReader_readUint32(reader);
-            if(dw->gen8.minor >= 3) {
+            if (DataWin_isVersionAtLeast(dw, 2, 3, 0, 0)) {
                 BinaryReader_skip(reader, 4); // sequencesPtr
             }
         }
@@ -1065,6 +1095,13 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                     go->creationCode = BinaryReader_readInt32(reader);
                     go->scaleX = BinaryReader_readFloat32(reader);
                     go->scaleY = BinaryReader_readFloat32(reader);
+                    if (DataWin_isVersionAtLeast(dw, 2, 2, 2, 302)) {
+                        go->imageSpeed = BinaryReader_readFloat32(reader);
+                        go->imageIndex = BinaryReader_readInt32(reader);
+                    } else {
+                        go->imageSpeed = 0.0f;
+                        go->imageIndex = 0;
+                    }
                     go->color = BinaryReader_readUint32(reader);
                     go->rotation = BinaryReader_readFloat32(reader);
                     if (dw->gen8.bytecodeVersion >= 16) {
@@ -1093,7 +1130,7 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                     RoomTile* tile = &room->tiles[j];
                     tile->x = BinaryReader_readInt32(reader);
                     tile->y = BinaryReader_readInt32(reader);
-                    tile->useSpriteDefinition = (dw->gen8.major >= 2);
+                    tile->useSpriteDefinition = DataWin_isVersionAtLeast(dw, 2, 0, 0, 0);
                     tile->backgroundDefinition = BinaryReader_readInt32(reader);
                     tile->sourceX = BinaryReader_readInt32(reader);
                     tile->sourceY = BinaryReader_readInt32(reader);
@@ -1114,7 +1151,7 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
         // Fill with default values, these will be replaced if it is GM:S 2+
         room->layerCount = 0;
 
-        if(dw->gen8.major >= 2) {
+        if (DataWin_isVersionAtLeast(dw, 2, 0, 0, 0)) {
             // Tiles PointerList
             BinaryReader_seek(reader, layersPtr);
             {
@@ -1158,7 +1195,7 @@ static void parseROOM(BinaryReader* reader, DataWin* dw) {
                                         RoomTile* tile = &assets->legacyTiles[j];
                                         tile->x = BinaryReader_readInt32(reader);
                                         tile->y = BinaryReader_readInt32(reader);
-                                        tile->useSpriteDefinition = (dw->gen8.major >= 2);
+                                        tile->useSpriteDefinition = DataWin_isVersionAtLeast(dw, 2, 0, 0, 0);
                                         tile->backgroundDefinition = BinaryReader_readInt32(reader);
                                         tile->sourceX = BinaryReader_readInt32(reader);
                                         tile->sourceY = BinaryReader_readInt32(reader);
@@ -1453,7 +1490,7 @@ static void parseTXTR(BinaryReader* reader, DataWin* dw, size_t chunkEnd) {
     if (count == 0) { free(ptrs); t->textures = nullptr; return; }
 
     // Read metadata entries
-    bool hasGeneratedMips = dw->gen8.major >= 2;
+    bool hasGeneratedMips = DataWin_isVersionAtLeast(dw, 2, 0, 0, 0);
     t->textures = safeMalloc(count * sizeof(Texture));
     repeat(count, i) {
         BinaryReader_seek(reader, ptrs[i]);
@@ -1951,4 +1988,22 @@ int32_t DataWin_resolveSPRT(DataWin* dw, uint32_t offset) {
     ptrdiff_t idx = hmgeti(dw->sprtOffsetMap, offset);
     if (0 > idx) return -1;
     return dw->sprtOffsetMap[idx].value;
+}
+
+// ===[ Version Detection ]===
+
+bool DataWin_isVersionAtLeast(const DataWin* dw, uint32_t major, uint32_t minor, uint32_t release, uint32_t build) {
+    const DetectedFormat* f = &dw->detectedFormat;
+    if (f->major != major) return f->major > major;
+    if (f->minor != minor) return f->minor > minor;
+    if (f->release != release) return f->release > release;
+    return f->build >= build;
+}
+
+void DataWin_bumpVersionTo(DataWin* dw, uint32_t major, uint32_t minor, uint32_t release, uint32_t build) {
+    if (DataWin_isVersionAtLeast(dw, major, minor, release, build)) return;
+    dw->detectedFormat.major = major;
+    dw->detectedFormat.minor = minor;
+    dw->detectedFormat.release = release;
+    dw->detectedFormat.build = build;
 }

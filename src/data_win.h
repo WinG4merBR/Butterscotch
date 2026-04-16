@@ -492,6 +492,8 @@ typedef struct {
     int32_t creationCode;
     float scaleX;
     float scaleY;
+    float imageSpeed; // GMS >= 2.2.2.302 only, otherwise 0.0f
+    int32_t imageIndex; // GMS >= 2.2.2.302 only, otherwise 0
     uint32_t color;
     float rotation;
     int32_t preCreateCode;
@@ -732,6 +734,16 @@ typedef struct {
     AudioEntry* entries;
 } Audo;
 
+// ===[ Detected Format ]===
+// The effective GMS version after heuristic detection. GEN8.version is unreliable since GM:S 2,
+// so chunk parsers probe the data and bump these fields upward when they detect newer-format features.
+typedef struct {
+    uint32_t major;
+    uint32_t minor;
+    uint32_t release;
+    uint32_t build;
+} DetectedFormat;
+
 // ===[ Top-level DataWin container ]===
 typedef struct DataWin {
     uint8_t* strgBuffer;        // owned copy of STRG chunk raw data
@@ -767,6 +779,8 @@ typedef struct DataWin {
     Txtr txtr;
     Audo audo;
 
+    DetectedFormat detectedFormat;
+
     // Lookup map: absolute file offset -> TPAG index (built during TPAG parsing)
     struct { uint32_t key; int32_t value; }* tpagOffsetMap;
     // Lookup map: absolute file offset -> SPRT index (built during SPRT parsing)
@@ -778,5 +792,12 @@ void DataWin_free(DataWin* dataWin);
 void DataWin_printDebugSummary(DataWin* dataWin);
 int32_t DataWin_resolveTPAG(DataWin* dw, uint32_t offset);
 int32_t DataWin_resolveSPRT(DataWin* dw, uint32_t offset);
+// Compares the detected effective GMS version (not the raw GEN8 version) against a lower bound.
+// Returns true if the detected version >= (major, minor, release, build).
+//
+// Mirrors UndertaleModTool's IsVersionAtLeast.
+bool DataWin_isVersionAtLeast(const DataWin* dw, uint32_t major, uint32_t minor, uint32_t release, uint32_t build);
+// Raises the detected effective version to at least (major, minor, release, build). No-op if the detected version is already >= the target.
+void DataWin_bumpVersionTo(DataWin* dw, uint32_t major, uint32_t minor, uint32_t release, uint32_t build);
 void GamePath_computeInternal(GamePath* path);
 PathPositionResult GamePath_getPosition(GamePath* path, double t);

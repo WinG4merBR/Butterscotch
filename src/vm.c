@@ -2538,7 +2538,7 @@ VMContext* VM_create(DataWin* dataWin) {
     }
 
     // Register built-in functions
-    VMBuiltins_registerAll(ctx, dataWin->gen8.major >= 2);
+    VMBuiltins_registerAll(ctx);
 
     // Pre-resolve all FUNC entries to cached builtin pointers or script code indices.
     // This eliminates per-call string hash lookups in handleCall.

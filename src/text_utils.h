@@ -147,7 +147,7 @@ static inline PreprocessedText TextUtils_preprocessGmlText(const char* text) {
 
 // Preprocess GML text ONLY if the runner is not GameMaker: Studio 2
 static inline PreprocessedText TextUtils_preprocessGmlTextIfNeeded(Runner* runner, const char* text) {
-    if (runner->isGMS2)
+    if (DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0))
         return (PreprocessedText){ .text = text, .owning = false };
     return TextUtils_preprocessGmlText(text);
 }

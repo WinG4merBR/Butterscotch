@@ -168,7 +168,6 @@ typedef struct Runner {
     int32_t viewCurrent; // index of the view currently being drawn (for view_current)
     struct { char* key; int value; }* disabledObjects; // stb_ds string hashmap, nullptr = no filtering
     struct { int key; Instance* value; }* instancesToId;
-    bool isGMS2;
     bool forceDrawDepth;
     // Dummy instance to serve as "self" during GLOB script execution
     // In bytecode version 17+, global init scripts store method values on "self" via Pop.v.v
