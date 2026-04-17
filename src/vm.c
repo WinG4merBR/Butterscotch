@@ -297,6 +297,7 @@ static int32_t resolveArrayAliasHm(SelfVarEntry* vars, int32_t varID) {
     return current;
 }
 
+#if IS_BC17_OR_HIGHER_ENABLED
 // Allocates a fresh synthetic varID and returns a global-scope GML array reference that points at it.
 // Use VM_arraySet to populate entries. Used by builtins that need to return arrays (layer_get_all, ds_list_create-adjacent helpers).
 // Entries live in the global array map until VM_free.
@@ -311,6 +312,7 @@ void VM_arraySet(VMContext* ctx, RValue* arrayRef, int32_t index, RValue val) {
     require(arrayRef->gmlArray.scope == INSTANCE_GLOBAL);
     arrayMapSet(&ctx->globalArrayMap, arrayRef->gmlArray.varID, index, val);
 }
+#endif
 
 // ===[ GML Array Reference Helpers (V17+) ]===
 // These resolve a RVALUE_GML_ARRAY to the appropriate array map based on scope,
@@ -319,6 +321,7 @@ void VM_arraySet(VMContext* ctx, RValue* arrayRef, int32_t index, RValue val) {
 // Forward declaration needed for array ref helpers
 static Instance* findInstanceByTarget(VMContext* ctx, int32_t target);
 
+#if IS_BC17_OR_HIGHER_ENABLED
 static ArrayMapEntry** resolveArrayMap(VMContext* ctx, RValue* arrayRef, int32_t* outVarID) {
     require(arrayRef->type == RVALUE_GML_ARRAY);
     int32_t varID = arrayRef->gmlArray.varID;
@@ -371,6 +374,7 @@ static void gmlArraySet(VMContext* ctx, RValue* arrayRef, int32_t index, RValue 
     ArrayMapEntry** map = resolveArrayMap(ctx, arrayRef, &resolvedVarID);
     arrayMapSet(map, resolvedVarID, index, val);
 }
+#endif
 
 // ===[ Trace Helpers ]===
 
@@ -627,12 +631,14 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
     if (access.isArray) {
         switch (instanceType) {
             case INSTANCE_LOCAL: {
+#if IS_BC17_OR_HIGHER_ENABLED
                 // If the local slot holds a V17 GML array reference (e.g. from `var x = layer_get_all()`), follow it into whichever array map the source data lives in.
                 uint32_t localSlot = resolveLocalSlot(ctx, varDef->varID);
                 if (ctx->localVarCount > localSlot && ctx->localVars[localSlot].type == RVALUE_GML_ARRAY) {
                     RValue ref = ctx->localVars[localSlot];
                     return gmlArrayGet(ctx, &ref, access.arrayIndex);
                 }
+#endif
                 RValue result = arrayMapGet(ctx->localArrayMap, varDef->varID, access.arrayIndex);
 #ifndef DISABLE_VM_TRACING
                 if (shouldTraceVariable(ctx->varReadsToBeTraced, "local", nullptr, varDef->name)) {
@@ -644,11 +650,13 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
                 return result;
             }
             case INSTANCE_GLOBAL: {
+#if IS_BC17_OR_HIGHER_ENABLED
                 // Follow V17 GML array reference in the global slot if present.
                 if (ctx->globalVarCount > (uint32_t) varDef->varID && ctx->globalVars[varDef->varID].type == RVALUE_GML_ARRAY) {
                     RValue ref = ctx->globalVars[varDef->varID];
                     return gmlArrayGet(ctx, &ref, access.arrayIndex);
                 }
+#endif
                 int32_t resolvedVarID = resolveArrayAlias(ctx->globalVars, ctx->globalVarCount, varDef->varID);
                 RValue result = arrayMapGet(ctx->globalArrayMap, resolvedVarID, access.arrayIndex);
 #ifndef DISABLE_VM_TRACING
@@ -1077,6 +1085,7 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
             int32_t instanceType = (int32_t) instrInstanceType(instr);
             uint32_t varRef = resolveVarOperand(extraData);
             uint8_t varType = (varRef >> 24) & 0xF8;
+#if IS_BC17_OR_HIGHER_ENABLED
             if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
                 // V17: Push a GML array reference for subsequent pushaf/popaf/pushac
                 // The stack has [scope, firstDimIndex] pushed before this instruction
@@ -1108,7 +1117,9 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
                     gmlArraySet(ctx, &topRef, firstIndex, newSubArray);
                     stackPush(ctx, newSubArray);
                 }
-            } else {
+            } else
+#endif
+            {
                 RValue val = resolveVariableRead(ctx, instanceType, varRef);
                 // Mark as variable-width (16 bytes on native stack) regardless of the RValue's actual type
                 stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
@@ -1138,6 +1149,7 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData)
 // otherwise subsequent pushaf reads would find an empty array at the wrong varID.
 static void handlePushLoc(VMContext* ctx, const uint8_t* extraData) {
     uint32_t varRef = resolveVarOperand(extraData);
+#if IS_BC17_OR_HIGHER_ENABLED
     uint8_t varType = (varRef >> 24) & 0xF8;
     if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
         Variable* varDef = resolveVarDef(ctx, varRef);
@@ -1147,14 +1159,16 @@ static void handlePushLoc(VMContext* ctx, const uint8_t* extraData) {
         } else {
             stackPush(ctx, RValue_makeGMLArray(varDef->varID, INSTANCE_LOCAL));
         }
-    } else {
-        RValue val = resolveVariableRead(ctx, INSTANCE_LOCAL, varRef);
-        stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
+        return;
     }
+#endif
+    RValue val = resolveVariableRead(ctx, INSTANCE_LOCAL, varRef);
+    stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
 }
 
 static void handlePushGlb(VMContext* ctx, const uint8_t* extraData) {
     uint32_t varRef = resolveVarOperand(extraData);
+#if IS_BC17_OR_HIGHER_ENABLED
     uint8_t varType = (varRef >> 24) & 0xF8;
     if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
         Variable* varDef = resolveVarDef(ctx, varRef);
@@ -1163,14 +1177,16 @@ static void handlePushGlb(VMContext* ctx, const uint8_t* extraData) {
         } else {
             stackPush(ctx, RValue_makeGMLArray(varDef->varID, INSTANCE_GLOBAL));
         }
-    } else {
-        RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
-        stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
+        return;
     }
+#endif
+    RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
+    stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
 }
 
 static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraData) {
     uint32_t varRef = resolveVarOperand(extraData);
+#if IS_BC17_OR_HIGHER_ENABLED
     uint8_t varType = (varRef >> 24) & 0xF8;
     if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
         Variable* varDef = resolveVarDef(ctx, varRef);
@@ -1183,10 +1199,11 @@ static void handlePushBltn(VMContext* ctx, uint32_t instr, const uint8_t* extraD
             }
         }
         stackPush(ctx, RValue_makeGMLArray(varDef->varID, scope));
-    } else {
-        RValue val = resolveVariableRead(ctx, (int32_t) instrInstanceType(instr), varRef);
-        stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
+        return;
     }
+#endif
+    RValue val = resolveVariableRead(ctx, (int32_t) instrInstanceType(instr), varRef);
+    stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
 }
 
 static void handlePushI(VMContext* ctx, uint32_t instr) {
@@ -2348,6 +2365,7 @@ static RValue executeLoop(VMContext* ctx) {
 
             // Break (extended opcodes in V17+, no-op/debug in V16)
             case OP_BREAK: {
+#if IS_BC17_OR_HIGHER_ENABLED
                 if (IS_BC16_OR_BELOW(ctx)) break;
                 int16_t breakType = instrInstanceType(instr);
                 switch (breakType) {
@@ -2440,6 +2458,7 @@ static RValue executeLoop(VMContext* ctx) {
                         fprintf(stderr, "VM: Unknown BREAK sub-opcode %d at offset %u in %s\n", breakType, instrAddr, ctx->currentCodeName);
                         abort();
                 }
+#endif
                 break;
             }
 

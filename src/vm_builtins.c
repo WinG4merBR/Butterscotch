@@ -1623,6 +1623,7 @@ static RValue builtinVariableInstanceSet(VMContext* ctx, RValue* args, int32_t a
 
 // ===[ METHOD ]===
 
+#if IS_BC17_OR_HIGHER_ENABLED
 static RValue builtinMethod(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeUndefined();
 
@@ -1636,6 +1637,7 @@ static RValue builtinMethod(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t a
 
     return RValue_makeMethod(codeIndex, boundInstance);
 }
+#endif
 
 // ===[ SCRIPT EXECUTE ]===
 
@@ -1644,10 +1646,13 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
 
     int32_t codeId;
 
+#if IS_BC17_OR_HIGHER_ENABLED
     if (args[0].type == RVALUE_METHOD) {
         // If it is a method value, we'll need to extract code index directly
         codeId = args[0].method.codeIndex;
-    } else {
+    } else
+#endif
+    {
         // Numeric script index
         int32_t scriptIdx = RValue_toInt32(args[0]);
 
@@ -1671,6 +1676,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
 
     // If the method has a bound instance, temporarily swap currentInstance
     Instance* savedInstance = (Instance*) ctx->currentInstance;
+#if IS_BC17_OR_HIGHER_ENABLED
     if (args[0].type == RVALUE_METHOD && args[0].method.boundInstanceId >= 0) {
         Runner* runner = (Runner*) ctx->runner;
         repeat(arrlen(runner->instances), i) {
@@ -1680,6 +1686,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
             }
         }
     }
+#endif
 
     RValue result = VM_callCodeIndex(ctx, codeId, scriptArgs, scriptArgCount);
 
@@ -1927,8 +1934,10 @@ static RValue builtinArrayLength1d(VMContext* ctx, RValue* args, int32_t argCoun
     int32_t varID;
     if (args[0].type == RVALUE_ARRAY_REF) {
         varID = args[0].int32;
+#if IS_BC17_OR_HIGHER_ENABLED
     } else if (args[0].type == RVALUE_GML_ARRAY) {
         varID = args[0].gmlArray.varID;
+#endif
     } else {
         return RValue_makeReal(0.0);
     }
@@ -5506,6 +5515,7 @@ static RValue builtinLayerBackgroundAlpha(VMContext* ctx, RValue* args, MAYBE_UN
     return RValue_makeUndefined();
 }
 
+#if IS_BC17_OR_HIGHER_ENABLED
 static RValue builtinLayerGetAllElements(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -5522,6 +5532,7 @@ static RValue builtinLayerGetAllElements(VMContext* ctx, RValue* args, MAYBE_UNU
     }
     return arr;
 }
+#endif
 
 static RValue builtinLayerGetElementType(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
@@ -5572,6 +5583,7 @@ static RValue builtinLayerSpriteDestroy(VMContext* ctx, RValue* args, MAYBE_UNUS
     return RValue_makeUndefined();
 }
 
+#if IS_BC17_OR_HIGHER_ENABLED
 static RValue builtinLayerGetAll(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     RValue arr = VM_createArray(ctx);
@@ -5599,6 +5611,7 @@ static RValue builtinLayerGetIdAtDepth(VMContext* ctx, RValue* args, MAYBE_UNUSE
         VM_arraySet(ctx, &arr, 0, RValue_makeReal(-1.0));
     return arr;
 }
+#endif
 
 static RValue builtinLayerVspeed(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
@@ -6028,7 +6041,9 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 
     // Script
     VM_registerBuiltin(ctx, "script_execute", builtinScriptExecute);
+#if IS_BC17_OR_HIGHER_ENABLED
     VM_registerBuiltin(ctx, "method", builtinMethod);
+#endif
 
     // OS
     VM_registerBuiltin(ctx, "os_get_language", builtinOsGetLanguage);
@@ -6337,12 +6352,16 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "layer_hspeed", builtinLayerHspeed);
     VM_registerBuiltin(ctx, "layer_get_vspeed", builtinLayerGetVspeed);
     VM_registerBuiltin(ctx, "layer_vspeed", builtinLayerVspeed);
+#if IS_BC17_OR_HIGHER_ENABLED
     VM_registerBuiltin(ctx, "layer_get_all", builtinLayerGetAll);
     VM_registerBuiltin(ctx, "layer_get_all_elements", builtinLayerGetAllElements);
+#endif
     VM_registerBuiltin(ctx, "layer_get_element_type", builtinLayerGetElementType);
     VM_registerBuiltin(ctx, "layer_sprite_get_sprite", builtinLayerSpriteGetSprite);
     VM_registerBuiltin(ctx, "layer_sprite_destroy", builtinLayerSpriteDestroy);
+#if IS_BC17_OR_HIGHER_ENABLED
     VM_registerBuiltin(ctx, "layer_get_id_at_depth", builtinLayerGetIdAtDepth);
+#endif
     VM_registerBuiltin(ctx, "layer_create", builtinLayerCreate);
     VM_registerBuiltin(ctx, "layer_destroy", builtinLayerDestroy);
     VM_registerBuiltin(ctx, "layer_background_create", builtinLayerBackgroundCreate);

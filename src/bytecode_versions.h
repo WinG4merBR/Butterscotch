@@ -5,6 +5,18 @@
 // If only a single bytecode version is enabled, the checks will be collapsed and removed by the compiler during build time, reducing code size and improving
 // performance on low end hardware!
 
+#if defined(ENABLE_BC16)
+#  define IS_BC16_OR_HIGHER_ENABLED 1
+#else
+#  define IS_BC16_OR_HIGHER_ENABLED 0
+#endif
+
+#if defined(ENABLE_BC17)
+#  define IS_BC17_OR_HIGHER_ENABLED 1
+#else
+#  define IS_BC17_OR_HIGHER_ENABLED 0
+#endif
+
 #if defined(ENABLE_BC16) && defined(ENABLE_BC17)
 #  define IS_BC16_OR_BELOW(ctx)   (16 >= ctx->dataWin->gen8.bytecodeVersion)
 #  define IS_BC16_OR_HIGHER(ctx)  (ctx->dataWin->gen8.bytecodeVersion >= 16)
