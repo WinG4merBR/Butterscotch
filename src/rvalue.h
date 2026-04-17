@@ -16,6 +16,8 @@ typedef struct GMLArray GMLArray;
 void GMLArray_decRef(struct GMLArray* arr);
 void GMLArray_incRef(struct GMLArray* arr);
 
+#include "gml_method.h"
+
 // ===[ GML Data Types (4-bit type codes) ]===
 #define GML_TYPE_DOUBLE   0x0
 #define GML_TYPE_FLOAT    0x1
@@ -48,10 +50,7 @@ typedef struct RValue {
         const char* string;
         GMLArray* array;
 #if IS_BC17_OR_HIGHER_ENABLED
-        struct {
-            int32_t codeIndex;       // CODE entry index for the function body
-            int32_t boundInstanceId; // instance ID to use as self (-1 = unbound/current self)
-        } method;
+        GMLMethod* method;
 #endif
     };
     // We use uint8_t for the type instead of RValueType because a enum value occupies 4 bytes, while uint8_t occupies 1 byte
@@ -122,8 +121,14 @@ static RValue RValue_makeArrayWeak(GMLArray* arr) {
 }
 
 #if IS_BC17_OR_HIGHER_ENABLED
+// Takes ownership: refCount is NOT bumped (caller hands off its ref). The returned RValue decRefs on free.
 static RValue RValue_makeMethod(int32_t codeIndex, int32_t boundInstanceId) {
-    return (RValue){ .method = { .codeIndex = codeIndex, .boundInstanceId = boundInstanceId }, .type = RVALUE_METHOD, .gmlStackType = GML_TYPE_VARIABLE };
+    return (RValue){ .method = GMLMethod_create(codeIndex, boundInstanceId), .type = RVALUE_METHOD, .ownsString = true, .gmlStackType = GML_TYPE_VARIABLE };
+}
+
+// Weak view: does not own (no decRef on free). Callers that stash the value long-term must incRef + set ownsString.
+static RValue RValue_makeMethodWeak(GMLMethod* m) {
+    return (RValue){ .method = m, .type = RVALUE_METHOD, .ownsString = false, .gmlStackType = GML_TYPE_VARIABLE };
 }
 #endif
 
@@ -154,7 +159,7 @@ static char* RValue_toString(RValue val) {
             return safeStrdup(buf);
 #if IS_BC17_OR_HIGHER_ENABLED
         case RVALUE_METHOD:
-            snprintf(buf, sizeof(buf), "<method:%d>", val.method.codeIndex);
+            snprintf(buf, sizeof(buf), "<method:%d>", val.method->codeIndex);
             return safeStrdup(buf);
 #endif
     }
@@ -216,7 +221,7 @@ static char* RValue_toStringTyped(RValue val) {
             return safeStrdup(buf);
 #if IS_BC17_OR_HIGHER_ENABLED
         case RVALUE_METHOD:
-            snprintf(buf, sizeof(buf), "method(code=%d, inst=%d)", val.method.codeIndex, val.method.boundInstanceId);
+            snprintf(buf, sizeof(buf), "method(code=%d, inst=%d)", val.method->codeIndex, val.method->boundInstanceId);
             return safeStrdup(buf);
 #endif
     }
@@ -232,6 +237,12 @@ static void RValue_free(RValue* val) {
         GMLArray_decRef(val->array);
         val->array = nullptr;
         val->ownsString = false;
+#if IS_BC17_OR_HIGHER_ENABLED
+    } else if (val->type == RVALUE_METHOD && val->ownsString && val->method != nullptr) {
+        GMLMethod_decRef(val->method);
+        val->method = nullptr;
+        val->ownsString = false;
+#endif
     }
 }
 

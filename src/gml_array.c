@@ -58,6 +58,12 @@ GMLArray* GMLArray_clone(GMLArray* src, void* newOwner) {
                 GMLArray_incRef(srcVal.array);
                 dst->data[i] = srcVal;
                 dst->data[i].ownsString = true;
+#if IS_BC17_OR_HIGHER_ENABLED
+            } else if (srcVal.type == RVALUE_METHOD && srcVal.method != nullptr) {
+                GMLMethod_incRef(srcVal.method);
+                dst->data[i] = srcVal;
+                dst->data[i].ownsString = true;
+#endif
             } else {
                 dst->data[i] = srcVal;
                 dst->data[i].ownsString = false;

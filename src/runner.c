@@ -1958,7 +1958,7 @@ static void writeRValueJson(JsonWriter* w, RValue val) {
 #if IS_BC17_OR_HIGHER_ENABLED
         case RVALUE_METHOD: {
             char buf[64];
-            snprintf(buf, sizeof(buf), "<method:%d>", val.method.codeIndex);
+            snprintf(buf, sizeof(buf), "<method:%d>", val.method->codeIndex);
             JsonWriter_string(w, buf);
             break;
         }

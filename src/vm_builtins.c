@@ -1694,7 +1694,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
 #if IS_BC17_OR_HIGHER_ENABLED
     if (args[0].type == RVALUE_METHOD) {
         // If it is a method value, we'll need to extract code index directly
-        codeId = args[0].method.codeIndex;
+        codeId = args[0].method->codeIndex;
     } else
 #endif
     {
@@ -1722,10 +1722,10 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
     // If the method has a bound instance, temporarily swap currentInstance
     Instance* savedInstance = (Instance*) ctx->currentInstance;
 #if IS_BC17_OR_HIGHER_ENABLED
-    if (args[0].type == RVALUE_METHOD && args[0].method.boundInstanceId >= 0) {
+    if (args[0].type == RVALUE_METHOD && args[0].method->boundInstanceId >= 0) {
         Runner* runner = (Runner*) ctx->runner;
         repeat(arrlen(runner->instances), i) {
-            if (runner->instances[i]->instanceId == (uint32_t) args[0].method.boundInstanceId) {
+            if (runner->instances[i]->instanceId == (uint32_t) args[0].method->boundInstanceId) {
                 ctx->currentInstance = runner->instances[i];
                 break;
             }

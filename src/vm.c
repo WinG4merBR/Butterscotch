@@ -266,6 +266,12 @@ static void storeIntoArraySlot(RValue* slot, int32_t index, RValue val) {
         GMLArray_incRef(val.array);
         val.ownsString = true;
         slot[index] = val;
+#if IS_BC17_OR_HIGHER_ENABLED
+    } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
+        GMLMethod_incRef(val.method);
+        val.ownsString = true;
+        slot[index] = val;
+#endif
     } else {
         val.ownsString = false;
         slot[index] = val;
@@ -905,6 +911,12 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
                 if (!val.ownsString) GMLArray_incRef(val.array);
                 val.ownsString = true;
                 *dest = val;
+#if IS_BC17_OR_HIGHER_ENABLED
+            } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
+                if (!val.ownsString) GMLMethod_incRef(val.method);
+                val.ownsString = true;
+                *dest = val;
+#endif
             } else {
                 *dest = val;
             }
@@ -920,6 +932,12 @@ static void resolveVariableWrite(VMContext* ctx, int32_t instanceType, uint32_t 
                 if (!val.ownsString) GMLArray_incRef(val.array);
                 val.ownsString = true;
                 *dest = val;
+#if IS_BC17_OR_HIGHER_ENABLED
+            } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
+                if (!val.ownsString) GMLMethod_incRef(val.method);
+                val.ownsString = true;
+                *dest = val;
+#endif
             } else {
                 *dest = val;
             }
@@ -2841,6 +2859,11 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
             } else if (argCopy.type == RVALUE_ARRAY && argCopy.array != nullptr) {
                 GMLArray_incRef(argCopy.array);
                 argCopy.ownsString = true;
+#if IS_BC17_OR_HIGHER_ENABLED
+            } else if (argCopy.type == RVALUE_METHOD && argCopy.method != nullptr) {
+                GMLMethod_incRef(argCopy.method);
+                argCopy.ownsString = true;
+#endif
             }
             ctx->scriptArgs[argIdx] = argCopy;
         }
@@ -2860,6 +2883,11 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     } else if (result.type == RVALUE_ARRAY && !result.ownsString && result.array != nullptr) {
         GMLArray_incRef(result.array);
         result.ownsString = true;
+#if IS_BC17_OR_HIGHER_ENABLED
+    } else if (result.type == RVALUE_METHOD && !result.ownsString && result.method != nullptr) {
+        GMLMethod_incRef(result.method);
+        result.ownsString = true;
+#endif
     }
 
     // Restore caller frame
