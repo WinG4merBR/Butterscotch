@@ -1877,9 +1877,16 @@ static void handleDup(VMContext* ctx, uint32_t instr) {
     for (int32_t i = 0; count > i; i++) {
         RValue copy = ctx->stack.slots[startIdx + i];
 
-        // If the value owns a string, duplicate it to avoid double-free
+        // If the value owns a string, duplicate it to avoid double-free.
+        // For arrays and methods, bump the refcount so each duplicate independently owns a reference.
         if (copy.type == RVALUE_STRING && copy.ownsString && copy.string != nullptr) {
             copy.string = safeStrdup(copy.string);
+        } else if (copy.type == RVALUE_ARRAY && copy.ownsString && copy.array != nullptr) {
+            GMLArray_incRef(copy.array);
+#if IS_BC17_OR_HIGHER_ENABLED
+        } else if (copy.type == RVALUE_METHOD && copy.ownsString && copy.method != nullptr) {
+            GMLMethod_incRef(copy.method);
+#endif
         }
 
         stackPush(ctx, copy);
