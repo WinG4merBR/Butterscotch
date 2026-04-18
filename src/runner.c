@@ -1390,21 +1390,28 @@ static void updateViews(Runner* runner) {
     Room* room = runner->currentRoom;
     if (!(room->flags & 1)) return;
 
-    for (int32_t vi = 0; 8 > vi; vi++) {
+    repeat(8, vi) {
         RoomView* view = &room->views[vi];
-        if (!view->enabled || 0 > view->objectId) continue;
+        if (!view->enabled) continue;
 
-        // Find first active instance of the target object
-        Instance* target = nullptr;
-        int32_t count = (int32_t) arrlen(runner->instances);
-        for (int32_t i = 0; count > i; i++) {
-            Instance* inst = runner->instances[i];
-            if (inst->active && VM_isObjectOrDescendant(runner->dataWin, inst->objectIndex, view->objectId)) { target = inst; break; };
+        // We fallback to (0, 0) if there isn't any object being followed, because we WANT the followAxis to run so the camera is properly clamped to room bounds
+        int32_t ix = 0;
+        int32_t iy = 0;
+
+        if (view->objectId > 0) {
+            // Find first active instance of the target object
+            Instance* target = nullptr;
+            int32_t count = (int32_t) arrlen(runner->instances);
+            repeat(count, i) {
+                Instance* inst = runner->instances[i];
+                if (inst->active && VM_isObjectOrDescendant(runner->dataWin, inst->objectIndex, view->objectId)) { target = inst; break; };
+            }
+
+            if (target != nullptr) {
+                ix = (int32_t) GMLReal_floor(target->x);
+                iy = (int32_t) GMLReal_floor(target->y);
+            }
         }
-        if (target == nullptr) continue;
-
-        int32_t ix = (int32_t) GMLReal_floor(target->x);
-        int32_t iy = (int32_t) GMLReal_floor(target->y);
 
         view->viewX = followAxis(view->viewX, view->viewWidth, ix, view->borderX, view->speedX, (int32_t) room->width);
         view->viewY = followAxis(view->viewY, view->viewHeight, iy, view->borderY, view->speedY, (int32_t) room->height);
