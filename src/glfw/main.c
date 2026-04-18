@@ -71,9 +71,56 @@ typedef struct {
     const char* recordInputsPath;
     const char* playbackInputsPath;
     const char* renderer;
+    YoYoOperatingSystem osType;
     bool lazyRooms;
     StringBooleanEntry* eagerRooms; // stb_ds string-keyed set of room names
 } CommandLineArgs;
+
+typedef struct { const char* name; YoYoOperatingSystem value; } OsTypeNameEntry;
+
+static const OsTypeNameEntry OS_TYPE_NAMES[] = {
+    {"unknown",       OS_UNKNOWN},
+    {"windows",       OS_WINDOWS},
+    {"win32",         OS_WINDOWS},
+    {"macosx",        OS_MACOSX},
+    {"macos",         OS_MACOSX},
+    {"psp",           OS_PSP},
+    {"ios",           OS_IOS},
+    {"android",       OS_ANDROID},
+    {"symbian",       OS_SYMBIAN},
+    {"linux",         OS_LINUX},
+    {"winphone",      OS_WINPHONE},
+    {"tizen",         OS_TIZEN},
+    {"win8native",    OS_WIN8NATIVE},
+    {"wiiu",          OS_WIIU},
+    {"3ds",           OS_3DS},
+    {"psvita",        OS_PSVITA},
+    {"bb10",          OS_BB10},
+    {"ps4",           OS_PS4},
+    {"xboxone",       OS_XBOXONE},
+    {"ps3",           OS_PS3},
+    {"xbox360",       OS_XBOX360},
+    {"uwp",           OS_UWP},
+    {"amazon",        OS_AMAZON},
+    {"switch",        OS_SWITCH},
+};
+#define OS_TYPE_NAMES_COUNT (sizeof(OS_TYPE_NAMES)/sizeof(OS_TYPE_NAMES[0]))
+
+static bool parseOsTypeArg(const char* s, YoYoOperatingSystem* out) {
+    forEach(const OsTypeNameEntry, entry, OS_TYPE_NAMES, OS_TYPE_NAMES_COUNT) {
+        if (strcmp(s, entry->name) == 0) {
+            *out = entry->value;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void printOsTypeNames(FILE* out) {
+    forEachIndexed(const OsTypeNameEntry, entry, i, OS_TYPE_NAMES, OS_TYPE_NAMES_COUNT) {
+        fprintf(out, "%s%s", i > 0 ? ", " : "", entry->name);
+    }
+}
 
 static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) {
     memset(args, 0, sizeof(CommandLineArgs));
@@ -111,6 +158,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"renderer", required_argument, nullptr, 'g'},
         {"lazy-rooms", no_argument, nullptr, 'z'},
         {"eager-room", required_argument, nullptr, 'G'},
+        {"os-type", required_argument, nullptr, 'O'},
         {nullptr,               0,                 nullptr,  0 }
     };
 
@@ -119,6 +167,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->traceBytecodeAfterFrame = 0;
     args->speedMultiplier = 1.0;
     args->renderer = "gl";
+    args->osType = OS_WINDOWS;
 
     int opt;
     while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1) {
@@ -269,6 +318,14 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 break;
             case 'P':
                 args->playbackInputsPath = optarg;
+                break;
+            case 'O':
+                if (!parseOsTypeArg(optarg, &args->osType)) {
+                    fprintf(stderr, "Error: Invalid --os-type value '%s' (expected: ", optarg);
+                    printOsTypeNames(stderr);
+                    fprintf(stderr, ")\n");
+                    exit(1);
+                }
                 break;
             default:
                 fprintf(stderr, "Usage: %s [--headless] [--screenshot=PATTERN] [--screenshot-at-frame=N ...] <path to data.win or game.unx>\n", argv[0]);
@@ -618,6 +675,7 @@ int main(int argc, char* argv[]) {
     // Initialize the runner
     Runner* runner = Runner_create(dataWin, vm, renderer, (FileSystem*) glfwFileSystem, audioSystem);
     runner->debugMode = args.debug;
+    runner->osType = args.osType;
 
     // Set up input recording/playback (both can be active: playback then continue recording)
     if (args.playbackInputsPath != nullptr) {

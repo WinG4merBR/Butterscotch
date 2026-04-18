@@ -47,6 +47,42 @@
 #define OTHER_END_OF_PATH   8
 #define OTHER_USER0         10
 
+// ===[ Operating System Types ]===
+// See GameMaker-HTML5's Globals.js
+typedef enum {
+    OS_UNKNOWN = -1,
+    OS_WINDOWS,
+    OS_MACOSX,
+    OS_PSP,
+    OS_IOS,
+    OS_ANDROID,
+    OS_SYMBIAN,
+    OS_LINUX,
+    OS_WINPHONE,
+    OS_TIZEN,
+    OS_WIN8NATIVE,
+    OS_WIIU,
+    OS_3DS,
+    OS_PSVITA,
+    OS_BB10,
+    OS_PS4,
+    OS_XBOXONE,
+    OS_PS3,
+    OS_XBOX360,
+    OS_UWP,
+    OS_AMAZON,
+    OS_SWITCH,
+
+    OS_LLVM_WIN32 = 65536,
+    OS_LLVM_MACOSX,
+    OS_LLVM_PSP,
+    OS_LLVM_IOS,
+    OS_LLVM_ANDROID,
+    OS_LLVM_SYMBIAN,
+    OS_LLVM_LINUX,
+    OS_LLVM_WINPHONE
+} YoYoOperatingSystem;
+
 typedef struct {
     bool visible;
     bool foreground;
@@ -264,6 +300,9 @@ typedef struct Runner {
 
     // Text file handles for file_text_* functions
     OpenTextFile openTextFiles[MAX_OPEN_TEXT_FILES];
+
+    // Used by the "os_type" built-in
+    YoYoOperatingSystem osType;
 } Runner;
 
 const char* Runner_getEventName(int32_t eventType, int32_t eventSubtype);

@@ -1116,6 +1116,7 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     runner->fileSystem = fileSystem;
     runner->audioSystem = audioSystem;
     runner->frameCount = 0;
+    runner->osType = OS_WINDOWS;
     runner->keyboard = RunnerKeyboard_create();
 
     Runner_reset(runner);

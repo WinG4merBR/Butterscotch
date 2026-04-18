@@ -184,11 +184,37 @@ int16_t VMBuiltins_resolveBuiltinVarId(const char* name) {
 
     // OS constants
     if (strcmp(name, "os_type") == 0) return BUILTIN_VAR_OS_TYPE;
+    if (strcmp(name, "os_unknown") == 0) return BUILTIN_VAR_OS_UNKNOWN;
+    if (strcmp(name, "os_win32") == 0) return BUILTIN_VAR_OS_WIN32;
     if (strcmp(name, "os_windows") == 0) return BUILTIN_VAR_OS_WINDOWS;
-    if (strcmp(name, "os_ps4") == 0) return BUILTIN_VAR_OS_PS4;
-    if (strcmp(name, "os_psvita") == 0) return BUILTIN_VAR_OS_PSVITA;
+    if (strcmp(name, "os_macosx") == 0) return BUILTIN_VAR_OS_MACOSX;
+    if (strcmp(name, "os_psp") == 0) return BUILTIN_VAR_OS_PSP;
+    if (strcmp(name, "os_ios") == 0) return BUILTIN_VAR_OS_IOS;
+    if (strcmp(name, "os_android") == 0) return BUILTIN_VAR_OS_ANDROID;
+    if (strcmp(name, "os_symbian") == 0) return BUILTIN_VAR_OS_SYMBIAN;
+    if (strcmp(name, "os_linux") == 0) return BUILTIN_VAR_OS_LINUX;
+    if (strcmp(name, "os_winphone") == 0) return BUILTIN_VAR_OS_WINPHONE;
+    if (strcmp(name, "os_tizen") == 0) return BUILTIN_VAR_OS_TIZEN;
+    if (strcmp(name, "os_win8native") == 0) return BUILTIN_VAR_OS_WIN8NATIVE;
+    if (strcmp(name, "os_wiiu") == 0) return BUILTIN_VAR_OS_WIIU;
     if (strcmp(name, "os_3ds") == 0) return BUILTIN_VAR_OS_3DS;
-    if (strcmp(name, "os_switch_") == 0) return BUILTIN_VAR_OS_SWITCH;
+    if (strcmp(name, "os_psvita") == 0) return BUILTIN_VAR_OS_PSVITA;
+    if (strcmp(name, "os_bb10") == 0) return BUILTIN_VAR_OS_BB10;
+    if (strcmp(name, "os_ps4") == 0) return BUILTIN_VAR_OS_PS4;
+    if (strcmp(name, "os_xboxone") == 0) return BUILTIN_VAR_OS_XBOXONE;
+    if (strcmp(name, "os_ps3") == 0) return BUILTIN_VAR_OS_PS3;
+    if (strcmp(name, "os_xbox360") == 0) return BUILTIN_VAR_OS_XBOX360;
+    if (strcmp(name, "os_uwp") == 0) return BUILTIN_VAR_OS_UWP;
+    if (strcmp(name, "os_amazon") == 0) return BUILTIN_VAR_OS_AMAZON;
+    if (strcmp(name, "os_switch") == 0) return BUILTIN_VAR_OS_SWITCH;
+    if (strcmp(name, "os_llvm_win32") == 0) return BUILTIN_VAR_OS_LLVM_WIN32;
+    if (strcmp(name, "os_llvm_macosx") == 0) return BUILTIN_VAR_OS_LLVM_MACOSX;
+    if (strcmp(name, "os_llvm_psp") == 0) return BUILTIN_VAR_OS_LLVM_PSP;
+    if (strcmp(name, "os_llvm_ios") == 0) return BUILTIN_VAR_OS_LLVM_IOS;
+    if (strcmp(name, "os_llvm_android") == 0) return BUILTIN_VAR_OS_LLVM_ANDROID;
+    if (strcmp(name, "os_llvm_symbian") == 0) return BUILTIN_VAR_OS_LLVM_SYMBIAN;
+    if (strcmp(name, "os_llvm_linux") == 0) return BUILTIN_VAR_OS_LLVM_LINUX;
+    if (strcmp(name, "os_llvm_winphone") == 0) return BUILTIN_VAR_OS_LLVM_WINPHONE;
 
     // Timing
     if (strcmp(name, "current_time") == 0) return BUILTIN_VAR_CURRENT_TIME;
@@ -282,12 +308,38 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
     }
 
     // OS constants
-    if (builtinVarId == BUILTIN_VAR_OS_TYPE) return RValue_makeReal(4.0); // os_linux
-    if (builtinVarId == BUILTIN_VAR_OS_WINDOWS) return RValue_makeReal(0.0);
-    if (builtinVarId == BUILTIN_VAR_OS_PS4) return RValue_makeReal(6.0);
-    if (builtinVarId == BUILTIN_VAR_OS_PSVITA) return RValue_makeReal(12.0);
-    if (builtinVarId == BUILTIN_VAR_OS_3DS) return RValue_makeReal(14.0);
-    if (builtinVarId == BUILTIN_VAR_OS_SWITCH) return RValue_makeReal(19.0);
+    if (builtinVarId == BUILTIN_VAR_OS_TYPE) return RValue_makeReal((double) runner->osType);
+    if (builtinVarId == BUILTIN_VAR_OS_UNKNOWN) return RValue_makeReal((double) OS_UNKNOWN);
+    if (builtinVarId == BUILTIN_VAR_OS_WIN32) return RValue_makeReal((double) OS_WINDOWS);
+    if (builtinVarId == BUILTIN_VAR_OS_WINDOWS) return RValue_makeReal((double) OS_WINDOWS);
+    if (builtinVarId == BUILTIN_VAR_OS_MACOSX) return RValue_makeReal((double) OS_MACOSX);
+    if (builtinVarId == BUILTIN_VAR_OS_PSP) return RValue_makeReal((double) OS_PSP);
+    if (builtinVarId == BUILTIN_VAR_OS_IOS) return RValue_makeReal((double) OS_IOS);
+    if (builtinVarId == BUILTIN_VAR_OS_ANDROID) return RValue_makeReal((double) OS_ANDROID);
+    if (builtinVarId == BUILTIN_VAR_OS_SYMBIAN) return RValue_makeReal((double) OS_SYMBIAN);
+    if (builtinVarId == BUILTIN_VAR_OS_LINUX) return RValue_makeReal((double) OS_LINUX);
+    if (builtinVarId == BUILTIN_VAR_OS_WINPHONE) return RValue_makeReal((double) OS_WINPHONE);
+    if (builtinVarId == BUILTIN_VAR_OS_TIZEN) return RValue_makeReal((double) OS_TIZEN);
+    if (builtinVarId == BUILTIN_VAR_OS_WIN8NATIVE) return RValue_makeReal((double) OS_WIN8NATIVE);
+    if (builtinVarId == BUILTIN_VAR_OS_WIIU) return RValue_makeReal((double) OS_WIIU);
+    if (builtinVarId == BUILTIN_VAR_OS_3DS) return RValue_makeReal((double) OS_3DS);
+    if (builtinVarId == BUILTIN_VAR_OS_PSVITA) return RValue_makeReal((double) OS_PSVITA);
+    if (builtinVarId == BUILTIN_VAR_OS_BB10) return RValue_makeReal((double) OS_BB10);
+    if (builtinVarId == BUILTIN_VAR_OS_PS4) return RValue_makeReal((double) OS_PS4);
+    if (builtinVarId == BUILTIN_VAR_OS_XBOXONE) return RValue_makeReal((double) OS_XBOXONE);
+    if (builtinVarId == BUILTIN_VAR_OS_PS3) return RValue_makeReal((double) OS_PS3);
+    if (builtinVarId == BUILTIN_VAR_OS_XBOX360) return RValue_makeReal((double) OS_XBOX360);
+    if (builtinVarId == BUILTIN_VAR_OS_UWP) return RValue_makeReal((double) OS_UWP);
+    if (builtinVarId == BUILTIN_VAR_OS_AMAZON) return RValue_makeReal((double) OS_AMAZON);
+    if (builtinVarId == BUILTIN_VAR_OS_SWITCH) return RValue_makeReal((double) OS_SWITCH);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_WIN32) return RValue_makeReal((double) OS_LLVM_WIN32);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_MACOSX) return RValue_makeReal((double) OS_LLVM_MACOSX);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_PSP) return RValue_makeReal((double) OS_LLVM_PSP);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_IOS) return RValue_makeReal((double) OS_LLVM_IOS);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_ANDROID) return RValue_makeReal((double) OS_LLVM_ANDROID);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_SYMBIAN) return RValue_makeReal((double) OS_LLVM_SYMBIAN);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_LINUX) return RValue_makeReal((double) OS_LLVM_LINUX);
+    if (builtinVarId == BUILTIN_VAR_OS_LLVM_WINPHONE) return RValue_makeReal((double) OS_LLVM_WINPHONE);
 
     // Per-instance properties
     if (inst != nullptr) {
@@ -707,8 +759,7 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
     if (builtinVarId == BUILTIN_VAR_ROOM_SPEED) { runner->currentRoom->speed = (uint32_t) RValue_toInt32(val); return; }
 
     // Read-only variables (silently ignore)
-    if (builtinVarId == BUILTIN_VAR_OS_TYPE || builtinVarId == BUILTIN_VAR_OS_WINDOWS ||
-        builtinVarId == BUILTIN_VAR_OS_PS4 || builtinVarId == BUILTIN_VAR_OS_PSVITA ||
+    if ((builtinVarId >= BUILTIN_VAR_OS_TYPE && BUILTIN_VAR_OS_LLVM_WINPHONE >= builtinVarId) ||
         builtinVarId == BUILTIN_VAR_ID || builtinVarId == BUILTIN_VAR_OBJECT_INDEX ||
         builtinVarId == BUILTIN_VAR_CURRENT_TIME ||
         builtinVarId == BUILTIN_VAR_VIEW_CURRENT || builtinVarId == BUILTIN_VAR_PATH_INDEX ||
