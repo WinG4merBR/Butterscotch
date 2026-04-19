@@ -28,6 +28,7 @@
 #include "ps2_utils.h"
 #include "stb_ds.h"
 #include "utils.h"
+#include "../profiler.h"
 
 #ifdef GPROF_PROFILING
 #include <ps2prof.h>
@@ -692,7 +693,13 @@ int main(int argc, char* argv[]) {
     StartTimerSystemTime();
 
     // ===[ Main Loop ]===
-    bool debugOverlayEnabled = JsonReader_getBool(JsonReader_getObject(configRoot, "debugOverlayEnabled"));
+    bool debugOverlayStartEnabled = JsonReader_getBool(JsonReader_getObject(configRoot, "debugOverlayEnabled"));
+    int debugOverlayState = debugOverlayStartEnabled ? 0 : 2;
+    uint16_t prevOverlayPadButtons = 0xFFFF;
+    int profilerFramesInWindow = 0;
+    static const int PROFILER_WINDOW_FRAMES = 60;
+    char profilerOverlayText[1024];
+    profilerOverlayText[0] = '\0';
     while (!runner->shouldExit) {
         u64 frameStartTime = GetTimerSystemTime();
         // ===[ Poll Controller (always poll every vsync) ]===
@@ -753,7 +760,10 @@ int main(int argc, char* argv[]) {
         }
 
         if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F12)) {
-            debugOverlayEnabled = !debugOverlayEnabled;
+            debugOverlayState = (debugOverlayState + 1) % 3;
+            Profiler_setEnabled(&vm->profiler, debugOverlayState == 1);
+            profilerFramesInWindow = 0;
+            profilerOverlayText[0] = '\0';
         }
 
         // Reset global interact state because I HATE when I get stuck while moving through rooms
@@ -852,7 +862,7 @@ int main(int argc, char* argv[]) {
         float tickTime = (float) duration / (float) (kBUSCLK / 1000);
 
         // ===[ Debug Overlay ]===
-        if (debugOverlayEnabled) {
+        if (debugOverlayState == 0 || debugOverlayState == 1) {
             u64 debugColor = GS_SETREG_RGBAQ(0xFF, 0xFF, 0xFF, 0x80, 0x00);
             // sbrk(0) returns the actual heap frontier; true free = top of RAM - sbrk frontier
             void* heapTop = sbrk(0);
@@ -872,6 +882,22 @@ int main(int argc, char* argv[]) {
 
             snprintf(debugText, sizeof(debugText), "Tick: %.2fms\nFree: %d bytes\nVRAM Free: %lu bytes\nRoom Speed: %u%s\nAtlas: (%u, %u, %u)%s", tickTime, freeBytes, (unsigned long) vramFreeBytes, roomSpeed, speedCapRemoved ? " [UNCAPPED]" : "", vramAtlasCount, eeramAtlasCount, gsRenderer->atlasCount, gsRenderer->evictedAtlasUsedInCurrentFrame ? " [THRASHING]" : "");
             gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, 10.0f, 10, 0.6f, debugColor, debugText);
+
+            if (debugOverlayState == 1) {
+                profilerFramesInWindow++;
+                if (profilerFramesInWindow >= PROFILER_WINDOW_FRAMES) {
+                    char* profilerReport = Profiler_createReport(vm->profiler, 8, profilerFramesInWindow);
+                    if (profilerReport != nullptr) {
+                        snprintf(profilerOverlayText, sizeof(profilerOverlayText), "%s", profilerReport);
+                        free(profilerReport);
+                    }
+                    Profiler_reset(vm->profiler);
+                    profilerFramesInWindow = 0;
+                }
+                float profilerY = 10.0f + (15.6f * 5.0f) + 6.0f;
+                const char* profilerDisplay = profilerOverlayText[0] != '\0' ? profilerOverlayText : "GML Profiler (collecting...)";
+                gsKit_fontm_print_scaled(gsGlobal, gsFontM, 10.0f, profilerY, 10, 0.35f, debugColor, profilerDisplay);
+            }
         }
 
         // Execute draw queue and flip buffers

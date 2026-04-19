@@ -29,6 +29,7 @@
 #include "stb_image_write.h"
 
 #include "utils.h"
+#include "profiler.h"
 
 // ===[ COMMAND LINE ARGUMENTS ]===
 typedef struct {
@@ -74,6 +75,7 @@ typedef struct {
     YoYoOperatingSystem osType;
     bool lazyRooms;
     StringBooleanEntry* eagerRooms; // stb_ds string-keyed set of room names
+    int profilerFramesBetween; // 0 = disabled
 } CommandLineArgs;
 
 typedef struct { const char* name; YoYoOperatingSystem value; } OsTypeNameEntry;
@@ -159,6 +161,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"lazy-rooms", no_argument, nullptr, 'z'},
         {"eager-room", required_argument, nullptr, 'G'},
         {"os-type", required_argument, nullptr, 'O'},
+        {"profiler", required_argument, nullptr, 'q'},
         {nullptr,               0,                 nullptr,  0 }
     };
 
@@ -168,6 +171,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->speedMultiplier = 1.0;
     args->renderer = "gl";
     args->osType = OS_WINDOWS;
+    args->profilerFramesBetween = 0;
 
     int opt;
     while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1) {
@@ -319,6 +323,16 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
             case 'P':
                 args->playbackInputsPath = optarg;
                 break;
+            case 'q': {
+                char* endPtr;
+                long framesBetween = strtol(optarg, &endPtr, 10);
+                if (*endPtr != '\0' || framesBetween <= 0) {
+                    fprintf(stderr, "Error: Invalid frame count '%s' for --profiler (must be > 0)\n", optarg);
+                    exit(1);
+                }
+                args->profilerFramesBetween = (int) framesBetween;
+                break;
+            }
             case 'O':
                 if (!parseOsTypeArg(optarg, &args->osType)) {
                     fprintf(stderr, "Error: Invalid --os-type value '%s' (expected: ", optarg);
@@ -539,6 +553,8 @@ int main(int argc, char* argv[]) {
 
     // Initialize VM
     VMContext* vm = VM_create(dataWin);
+
+    Profiler_setEnabled(&vm->profiler, args.profilerFramesBetween > 0);
 
     if (args.hasSeed) {
         srand((unsigned int) args.seed);
@@ -824,6 +840,15 @@ int main(int argc, char* argv[]) {
 
             // Run one game step (Begin Step, Keyboard, Alarms, Step, End Step, room transitions)
             Runner_step(runner);
+
+            if (args.profilerFramesBetween > 0 && runner->frameCount > 0 && runner->frameCount % args.profilerFramesBetween == 0) {
+                char* profilerReport = Profiler_createReport(vm->profiler, 20, args.profilerFramesBetween);
+                if (profilerReport != nullptr) {
+                    fprintf(stderr, "%s\n", profilerReport);
+                    free(profilerReport);
+                }
+                Profiler_reset(vm->profiler);
+            }
 
             // Update audio system (gain fading, cleanup ended sounds)
             float dt = (float) (glfwGetTime() - lastFrameTime);

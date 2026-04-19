@@ -5,6 +5,8 @@
 #include "binary_utils.h"
 #include "utils.h"
 #include "bytecode_versions.h"
+#include "profiler.h"
+#include "string_builder.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,24 +29,18 @@ static bool shouldTraceStack(VMContext* ctx) {
 
 // Returns a heap-allocated "[elem0, elem1, ..., elemN]" string for the current stack contents (bottom -> top). Caller frees.
 static char* formatStackContents(VMContext* ctx) {
-    size_t cap = 256;
-    size_t len = 1;
-    char* buf = safeCalloc(cap, sizeof(char));
-    buf[0] = '[';
+    StringBuilder sb = StringBuilder_create(256);
+    StringBuilder_appendChar(&sb, '[');
     repeat(ctx->stack.top, si) {
         char* typed = RValue_toStringTyped(ctx->stack.slots[si]);
-        const char* sep = (si > 0) ? ", " : "";
-        size_t needed = strlen(sep) + strlen(typed) + 2;
-        if (len + needed > cap) {
-            cap = (len + needed) * 2;
-            buf = realloc(buf, cap);
-        }
-        len += sprintf(buf + len, "%s%s", sep, typed);
+        if (si > 0) StringBuilder_append(&sb, ", ");
+        StringBuilder_append(&sb, typed);
         free(typed);
     }
-    buf[len++] = ']';
-    buf[len] = '\0';
-    return buf;
+    StringBuilder_appendChar(&sb, ']');
+    char* result = StringBuilder_toString(&sb);
+    StringBuilder_free(&sb);
+    return result;
 }
 #endif
 
@@ -2353,6 +2349,8 @@ static void handleBreak(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
 
 static RValue executeLoop(VMContext* ctx) {
     while (ctx->codeEnd > ctx->ip) {
+        if (ctx->profiler != nullptr)
+            Profiler_tickInstruction(ctx->profiler);
         uint32_t instrAddr = ctx->ip;
         uint32_t instr = BinaryUtils_readUint32(ctx->bytecodeBase + ctx->ip);
         ctx->ip += 4;
@@ -2514,6 +2512,8 @@ VMContext* VM_create(DataWin* dataWin) {
     ctx->currentEventType = -1;
     ctx->currentEventSubtype = -1;
     ctx->currentEventObjectIndex = -1;
+
+    ctx->profiler = nullptr; // lazily allocated by Profiler_setEnabled(&ctx->profiler, true)
 
     // Validate that no code entry exceeds MAX_CODE_LOCALS (the VM uses stack-allocated arrays of this size)
     repeat(dataWin->code.count, i) {
@@ -2761,7 +2761,9 @@ RValue VM_executeCode(VMContext* ctx, int32_t codeIndex) {
     int32_t savedSavearefBalance = ctx->savearefBalance;
     ctx->savearefBalance = 0;
 
+    Profiler_enter(ctx->profiler, code->name);
     RValue result = executeLoop(ctx);
+    Profiler_exit(ctx->profiler);
 
     requireMessage(ctx->savearefBalance == 0, "SAVEAREF/RESTOREAREF imbalance at end of VM_executeCode (unpaired SAVEAREF)");
     ctx->savearefBalance = savedSavearefBalance;
@@ -2851,7 +2853,9 @@ RValue VM_callCodeIndex(VMContext* ctx, int32_t codeIndex, RValue* args, int32_t
     ctx->savearefBalance = 0;
 
     // Execute the callee
+    Profiler_enter(ctx->profiler, code->name);
     RValue result = executeLoop(ctx);
+    Profiler_exit(ctx->profiler);
 
     requireMessage(ctx->savearefBalance == 0, "SAVEAREF/RESTOREAREF imbalance at end of VM_callCodeIndex (unpaired SAVEAREF)");
 
@@ -3459,6 +3463,10 @@ void VM_free(VMContext* ctx) {
 
     // Reset mutable runtime state
     VM_reset(ctx);
+
+    // Free profiler (no-op if never enabled)
+    Profiler_destroy(ctx->profiler);
+    ctx->profiler = nullptr;
 
     // Free global vars array itself
     free(ctx->globalVars);
