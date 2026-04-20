@@ -287,7 +287,7 @@ static void storeIntoArraySlot(RValue* slot, RValue val) {
 // Returns the (possibly newly-forked) GMLArray* now in *slot.
 static GMLArray* VM_arrayWriteAt(VMContext* ctx, RValue* slot, int32_t index, RValue val) {
     require(slot != nullptr);
-    require(index >= 0);
+    requireMessageFormatted(index >= 0, "Trying to write to an array using a negative index! Index: %d", index);
 
     void* intendedOwner;
 #if IS_BC17_OR_HIGHER_ENABLED
@@ -2581,7 +2581,7 @@ VMContext* VM_create(DataWin* dataWin) {
     // Validate that no code entry exceeds MAX_CODE_LOCALS (the VM uses stack-allocated arrays of this size)
     repeat(dataWin->code.count, i) {
         CodeEntry* entry = &dataWin->code.entries[i];
-        require(MAX_CODE_LOCALS > entry->localsCount);
+        requireMessageFormatted(MAX_CODE_LOCALS > entry->localsCount, "Code %s has too many locals!", entry->name);
     }
 
     // Pre-resolve built-in variable IDs (replaces runtime strcmp chains with O(1) switch dispatch)
@@ -2805,7 +2805,7 @@ static uint32_t computeLocalsCount(VMContext* ctx) {
         }
     }
     if (localsCount == 0) localsCount = 1;
-    requireMessage(MAX_CODE_LOCALS >= localsCount, "Code has too many locals!");
+    requireMessageFormatted(MAX_CODE_LOCALS >= localsCount, "Code %s has too many locals!", ctx->currentCodeName);
     return localsCount;
 }
 
