@@ -1343,7 +1343,7 @@ static RValue builtinChoose(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t a
 
 static RValue builtinRandomize(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     if (ctx->hasFixedSeed) return RValue_makeUndefined();
-    srand((unsigned int) time(nullptr));
+    srand((unsigned int) time(nullptr) + (ctx->runner->frameCount * 2654435761u)); // 2654435761u = Knuth's multiplier
     return RValue_makeUndefined();
 }
 
