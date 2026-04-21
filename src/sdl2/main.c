@@ -626,7 +626,7 @@ int main(int argc, char* argv[]) {
     SDL2FileSystem* sdl2FileSystem = SDL2FileSystem_create(args.dataWinPath);
 
     // Init SDL2
-    if (!SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS|SDL_INIT_TIMER|SDL_INIT_GAMECONTROLLER)) {
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS|SDL_INIT_TIMER|SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "Failed to initialize SDL2\n");
         DataWin_free(dataWin);
         freeCommandLineArgs(&args);
