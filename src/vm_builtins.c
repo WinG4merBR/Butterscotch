@@ -5073,6 +5073,69 @@ static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCoun
     return RValue_makeReal((GMLReal) INSTANCE_NOONE);
 }
 
+// rectangle_in_rectangle(px1, py1, px2, py2, x1, y1, x2, y2)
+// Returns 0 if rectangle P is outside R, 1 if fully inside, 2 if partially overlapping.
+// Matches GameMaker-HTML5 scripts/functions/Function_Collision.js.
+static RValue builtinRectangleInRectangle(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (8 > argCount) return RValue_makeReal(0.0);
+
+    GMLReal px1 = RValue_toReal(args[0]);
+    GMLReal py1 = RValue_toReal(args[1]);
+    GMLReal px2 = RValue_toReal(args[2]);
+    GMLReal py2 = RValue_toReal(args[3]);
+    GMLReal x1  = RValue_toReal(args[4]);
+    GMLReal y1  = RValue_toReal(args[5]);
+    GMLReal x2  = RValue_toReal(args[6]);
+    GMLReal y2  = RValue_toReal(args[7]);
+
+    // Normalize so (1,1) is always top-left and (2,2) is bottom-right.
+    if (px1 > px2) { GMLReal t = px1; px1 = px2; px2 = t; }
+    if (py1 > py2) { GMLReal t = py1; py1 = py2; py2 = t; }
+    if (x1  > x2)  { GMLReal t = x1;  x1  = x2;  x2  = t; }
+    if (y1  > y2)  { GMLReal t = y1;  y1  = y2;  y2  = t; }
+
+    // Count how many corners of P sit inside R.
+    int32_t cornersIn = 0;
+    if (px1 >= x1 && px1 <= x2 && py1 >= y1 && py1 <= y2) cornersIn |= 1;
+    if (px2 >= x1 && px2 <= x2 && py1 >= y1 && py1 <= y2) cornersIn |= 2;
+    if (px2 >= x1 && px2 <= x2 && py2 >= y1 && py2 <= y2) cornersIn |= 4;
+    if (px1 >= x1 && px1 <= x2 && py2 >= y1 && py2 <= y2) cornersIn |= 8;
+
+    if (cornersIn == 15) return RValue_makeReal(1.0);
+
+    if (cornersIn == 0) {
+        // No P corner is inside R. Check whether R's corners are inside P (R engulfs P partially)
+        // or the rectangles cross axis-wise (T-intersection).
+        int32_t rCornersIn = 0;
+        if (x1 >= px1 && x1 <= px2 && y1 >= py1 && y1 <= py2) rCornersIn |= 1;
+        if (x2 >= px1 && x2 <= px2 && y1 >= py1 && y1 <= py2) rCornersIn |= 2;
+        if (x2 >= px1 && x2 <= px2 && y2 >= py1 && y2 <= py2) rCornersIn |= 4;
+        if (x1 >= px1 && x1 <= px2 && y2 >= py1 && y2 <= py2) rCornersIn |= 8;
+        if (rCornersIn != 0) return RValue_makeReal(2.0);
+
+        // R crosses P horizontally (R's x-edges within P, P's y-edges within R).
+        int32_t crossX = 0;
+        if (x1 >= px1 && x1 <= px2 && py1 >= y1 && py1 <= y2) crossX |= 1;
+        if (x2 >= px1 && x2 <= px2 && py1 >= y1 && py1 <= y2) crossX |= 2;
+        if (x2 >= px1 && x2 <= px2 && py2 >= y1 && py2 <= y2) crossX |= 4;
+        if (x1 >= px1 && x1 <= px2 && py2 >= y1 && py2 <= y2) crossX |= 8;
+        if (crossX != 0) return RValue_makeReal(2.0);
+
+        // R crosses P vertically (R's y-edges within P, P's x-edges within R).
+        int32_t crossY = 0;
+        if (px1 >= x1 && px1 <= x2 && y1 >= py1 && y1 <= py2) crossY |= 1;
+        if (px2 >= x1 && px2 <= x2 && y1 >= py1 && y1 <= py2) crossY |= 2;
+        if (px2 >= x1 && px2 <= x2 && y2 >= py1 && y2 <= py2) crossY |= 4;
+        if (px1 >= x1 && px1 <= x2 && y2 >= py1 && y2 <= py2) crossY |= 8;
+        if (crossY != 0) return RValue_makeReal(2.0);
+
+        return RValue_makeReal(0.0);
+    }
+
+    // Some but not all of P's corners are inside R: partial overlap.
+    return RValue_makeReal(2.0);
+}
+
 // collision_rectangle(x1, y1, x2, y2, obj, prec, notme)
 static RValue builtinCollisionRectangle(VMContext* ctx, RValue* args, int32_t argCount) {
     if (7 > argCount) return RValue_makeReal((GMLReal) INSTANCE_NOONE);
@@ -6672,6 +6735,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     // Collision
     VM_registerBuiltin(ctx, "place_meeting", builtinPlaceMeeting);
     VM_registerBuiltin(ctx, "collision_rectangle", builtinCollisionRectangle);
+    VM_registerBuiltin(ctx, "rectangle_in_rectangle", builtinRectangleInRectangle);
     VM_registerBuiltin(ctx, "collision_line", builtinCollisionLine);
     VM_registerBuiltin(ctx, "collision_point", builtinCollisionPoint);
     VM_registerBuiltin(ctx, "instance_place", builtinInstancePlace);
