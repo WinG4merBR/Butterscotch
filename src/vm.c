@@ -588,6 +588,7 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
                 // function init(arg2) {
                 //     var test = arg2[0]; // We NEED to read the [0] from the array
                 // }
+                // Without this, the caller gets the whole array back
                 if (access.isArray && result.type == RVALUE_ARRAY && result.array != nullptr) {
                     result = VM_arrayReadAt(&result, access.arrayIndex);
                 }
@@ -1787,7 +1788,7 @@ static void handleCmp(VMContext* ctx, uint32_t instr) {
             case CMP_EQ:  result = eq;  break;
             case CMP_NEQ: result = !eq; break;
             default:      result = false; break;
-        } 
+        }
 #if IS_BC17_OR_HIGHER_ENABLED
     } else if (a.type == RVALUE_METHOD || b.type == RVALUE_METHOD) {
         // Method is only == to the same method
