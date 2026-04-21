@@ -149,7 +149,7 @@ jobs:
         run: |
           git clone https://github.com/libsdl-org/SDL.git /tmp/SDL2 -b release-2.32.10
           cmake -B /tmp/SDL2/build -S /tmp/SDL2 \
-            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/mingw-w64.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/cmake/mingw-w64-i686.cmake \
             -DCMAKE_INSTALL_PREFIX=/usr/i686-w64-mingw32
           cmake --build /tmp/SDL2/build --parallel $(nproc)
           sudo cmake --install /tmp/SDL2/build
