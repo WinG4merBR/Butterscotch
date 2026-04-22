@@ -5611,6 +5611,44 @@ static int32_t resolveLayerIdArg(Runner* runner, RValue arg) {
     return RValue_toInt32(arg);
 }
 
+static void instanceSetLayerActiveState(Runner* runner, int32_t layerId, bool isActive) {
+    if (0 > layerId || runner->currentRoom == nullptr) return;
+
+    repeat(runner->currentRoom->layerCount, layerIndex) {
+        RoomLayer* layer = &runner->currentRoom->layers[layerIndex];
+
+        if ((int32_t) layer->id != layerId)
+            continue;
+
+        if (layer->type != RoomLayerType_Instances || layer->instancesData == nullptr)
+            break;
+
+        RoomLayerInstancesData* layerData = layer->instancesData;
+
+        repeat(layerData->instanceCount, instanceIndex) {
+            Instance* inst = hmget(runner->instancesToId, layerData->instanceIds[instanceIndex]);
+            if (inst != nullptr && !inst->destroyed) inst->active = isActive;
+        }
+        return;
+    }
+}
+
+static RValue builtinInstanceActivateLayer(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t layerId = resolveLayerIdArg(runner, args[0]);
+    instanceSetLayerActiveState(runner, layerId, true);
+    return RValue_makeUndefined();
+}
+
+static RValue builtinInstanceDeactivateLayer(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (1 > argCount) return RValue_makeUndefined();
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t layerId = resolveLayerIdArg(runner, args[0]);
+    instanceSetLayerActiveState(runner, layerId, false);
+    return RValue_makeUndefined();
+}
+
 static RValue builtinLayerGetId(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     char* name = RValue_toString(args[0]);
@@ -7166,6 +7204,8 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "instance_activate_all", builtinInstanceActivateAll);
     VM_registerBuiltin(ctx, "instance_activate_object", builtinInstanceActivateObject);
     VM_registerBuiltin(ctx, "instance_deactivate_object", builtinInstanceDeactivateObject);
+    VM_registerBuiltin(ctx, "instance_deactivate_layer", builtinInstanceDeactivateLayer);
+    VM_registerBuiltin(ctx, "instance_activate_layer", builtinInstanceActivateLayer);
     VM_registerBuiltin(ctx, "action_kill_object", builtinActionKillObject);
     VM_registerBuiltin(ctx, "action_create_object", builtinActionCreateObject);
     VM_registerBuiltin(ctx, "action_set_relative", builtinActionSetRelative);
