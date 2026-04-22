@@ -6503,17 +6503,26 @@ static RValue builtinMpGridPath(VMContext* ctx, RValue* args, int32_t argCount) 
     outPath->points = nullptr;
     outPath->pointCount = 0;
 
-    outPath->points = (PathPoint*) malloc(chainLen * sizeof(PathPoint));
-    outPath->pointCount = (uint32_t) chainLen;
-    for (int32_t i = 0; chainLen > i; i++) {
-        int32_t idx = chain[chainLen - 1 - i];
-        int32_t cxx = idx / g->vcells;
-        int32_t cyy = idx % g->vcells;
-        float wx = (float) (g->left + (cxx + 0.5) * g->cellWidth);
-        float wy = (float) (g->top + (cyy + 0.5) * g->cellHeight);
-        // Override endpoints with exact start/goal coords so the instance aligns
-        if (i == 0) { wx = (float) xs; wy = (float) ys; }
-        if (i == chainLen - 1) { wx = (float) xg; wy = (float) yg; }
+    // When start cell == goal cell, chain has 1 node but the native runner and GameMaker-HTML5 still emit a 2-point path (start coord + goal coord).
+    // Without this, the path length is 0, adaptPath early-returns before advancing pathPosition past 1.0, and the OTHER_END_OF_PATH event never fires.
+    int32_t pointCount = (startIdx == goalIdx) ? 2 : chainLen;
+    outPath->points = (PathPoint*) malloc(pointCount * sizeof(PathPoint));
+    outPath->pointCount = (uint32_t) pointCount;
+    for (int32_t i = 0; pointCount > i; i++) {
+        float wx, wy;
+        if (startIdx == goalIdx) {
+            wx = (float) (i == 0 ? xs : xg);
+            wy = (float) (i == 0 ? ys : yg);
+        } else {
+            int32_t idx = chain[chainLen - 1 - i];
+            int32_t cxx = idx / g->vcells;
+            int32_t cyy = idx % g->vcells;
+            wx = (float) (g->left + (cxx + 0.5) * g->cellWidth);
+            wy = (float) (g->top + (cyy + 0.5) * g->cellHeight);
+            // Override endpoints with exact start/goal coords so the instance aligns
+            if (i == 0) { wx = (float) xs; wy = (float) ys; }
+            if (i == chainLen - 1) { wx = (float) xg; wy = (float) yg; }
+        }
         outPath->points[i].x = wx;
         outPath->points[i].y = wy;
         outPath->points[i].speed = 100.0f;
