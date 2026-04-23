@@ -354,7 +354,7 @@ static uint16_t getMusicStreamSampleRate(Ps2AudioSystem* ps2, Ps2MusicStream* st
 
 static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) {
     int32_t* accum = ps2->mixAccum;
-    memset(accum, 0, samplePairs * 2 * sizeof(int32_t));
+    memset(accum, 0, samplePairs * sizeof(int32_t));
 
     // ===[ Mix SFX instances (from LRU cache) ]===
     repeat(MAX_PS2_SOUND_INSTANCES, i) {
@@ -379,41 +379,60 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
         uint32_t totalSamples = inst->totalSamples;
         bool loop = inst->loop;
         float gain = inst->currentGain * inst->sondVolume * ps2->masterGain;
+        int32_t gainQ15 = (int32_t) (gain * 32768.0f);
         Ps2AudoEntry* audo = &ps2->audoEntries[inst->audoIndex];
         float stepRate = inst->pitch * inst->sondPitch * ((float) audo->sampleRate / (float) AUDSRV_OUTPUT_FREQ);
         uint32_t stepInt = (uint32_t) stepRate;
         uint32_t stepFrac = (uint32_t) ((stepRate - (float) stepInt) * 4294967296.0f);
+        bool nativeRate = (stepInt == 1 && stepFrac == 0);
 
         uint32_t posInt = inst->positionInt;
         uint32_t posFrac = inst->positionFrac;
         bool ended = false;
 
-        for (int32_t s = 0; samplePairs > s; s++) {
-            int32_t idx0 = (int32_t) posInt;
-            int32_t idx1 = idx0 + 1;
-            if ((uint32_t) idx1 >= totalSamples) idx1 = idx0;
+        if (nativeRate) {
+            // Fast path: no resampling, no fractional position (most SFX at 22050 Hz)
+            for (int32_t s = 0; samplePairs > s; s++) {
+                int32_t sample = pcm[posInt];
+                accum[s] += (sample * gainQ15) >> 15;
+                posInt++;
 
-            int32_t s0 = pcm[idx0];
-            int32_t s1 = pcm[idx1];
-            int32_t frac = (int32_t) (posFrac >> 16);
-            int32_t sample = s0 + ((s1 - s0) * frac >> 16);
+                if (posInt >= totalSamples) {
+                    if (loop) {
+                        posInt = 0;
+                    } else {
+                        ended = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // Resampling path: linear interpolation with 32.32 fixed-point position
+            for (int32_t s = 0; samplePairs > s; s++) {
+                int32_t idx0 = (int32_t) posInt;
+                int32_t idx1 = idx0 + 1;
+                if ((uint32_t) idx1 >= totalSamples) idx1 = idx0;
 
-            int32_t scaled = (int32_t) (sample * gain);
-            accum[s * 2]     += scaled;
-            accum[s * 2 + 1] += scaled;
+                int32_t s0 = pcm[idx0];
+                int32_t s1 = pcm[idx1];
+                int32_t frac = (int32_t) (posFrac >> 16);
+                int32_t sample = s0 + ((s1 - s0) * frac >> 16);
 
-            uint32_t oldFrac = posFrac;
-            posFrac += stepFrac;
-            if (oldFrac > posFrac) posInt++;
-            posInt += stepInt;
+                accum[s] += (sample * gainQ15) >> 15;
 
-            if (posInt >= totalSamples) {
-                if (loop) {
-                    posInt = posInt % totalSamples;
-                    posFrac = 0;
-                } else {
-                    ended = true;
-                    break;
+                uint32_t oldFrac = posFrac;
+                posFrac += stepFrac;
+                if (oldFrac > posFrac) posInt++;
+                posInt += stepInt;
+
+                if (posInt >= totalSamples) {
+                    if (loop) {
+                        posInt = posInt % totalSamples;
+                        posFrac = 0;
+                    } else {
+                        ended = true;
+                        break;
+                    }
                 }
             }
         }
@@ -430,10 +449,12 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
 
         // Hoist per-stream constants (pitch/sampleRate don't change mid-mix)
         float gain = stream->currentGain * stream->sondVolume * ps2->masterGain;
+        int32_t gainQ15 = (int32_t) (gain * 32768.0f);
         uint16_t streamSampleRate = getMusicStreamSampleRate(ps2, stream);
         float stepRate = stream->pitch * stream->sondPitch * ((float) streamSampleRate / (float) AUDSRV_OUTPUT_FREQ);
         uint32_t stepInt = (uint32_t) stepRate;
         uint32_t stepFrac = (uint32_t) ((stepRate - (float) stepInt) * 4294967296.0f);
+        bool nativeRate = (stepInt == 1 && stepFrac == 0);
 
         for (int32_t s = 0; samplePairs > s; s++) {
             uint32_t bufSamples = stream->bufferSampleCount[stream->activeBuffer];
@@ -468,19 +489,23 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
                 }
             }
 
-            int32_t idx0 = (int32_t) stream->readPosition;
-            int32_t idx1 = idx0 + 1;
-            if ((uint32_t) idx1 >= bufSamples) idx1 = idx0;
-
             int16_t* buf = stream->buffers[stream->activeBuffer];
-            int32_t s0 = buf[idx0];
-            int32_t s1 = buf[idx1];
-            int32_t frac = (int32_t) (stream->readPositionFrac >> 16);
-            int32_t sample = s0 + ((s1 - s0) * frac >> 16);
+            int32_t sample;
 
-            int32_t scaled = (int32_t) (sample * gain);
-            accum[s * 2]     += scaled;
-            accum[s * 2 + 1] += scaled;
+            if (nativeRate) {
+                sample = buf[stream->readPosition];
+            } else {
+                int32_t idx0 = (int32_t) stream->readPosition;
+                int32_t idx1 = idx0 + 1;
+                if ((uint32_t) idx1 >= bufSamples) idx1 = idx0;
+
+                int32_t s0 = buf[idx0];
+                int32_t s1 = buf[idx1];
+                int32_t frac = (int32_t) (stream->readPositionFrac >> 16);
+                sample = s0 + ((s1 - s0) * frac >> 16);
+            }
+
+            accum[s] += (sample * gainQ15) >> 15;
 
             uint32_t oldFrac = stream->readPositionFrac;
             stream->readPositionFrac += stepFrac;
@@ -489,13 +514,14 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
         }
     }
 
-    // ===[ Clamp accumulator and write interleaved stereo ]===
-    int32_t totalSamples = samplePairs * 2;
-    for (int32_t s = 0; totalSamples > s; s++) {
+    // ===[ Clamp mono accumulator and duplicate into interleaved stereo ]===
+    for (int32_t s = 0; samplePairs > s; s++) {
         int32_t v = accum[s];
         if (v > 32767) v = 32767;
         if (-32768 > v) v = -32768;
-        outBuf[s] = (int16_t) v;
+        int16_t v16 = (int16_t) v;
+        outBuf[s * 2]     = v16;
+        outBuf[s * 2 + 1] = v16;
     }
 }
 

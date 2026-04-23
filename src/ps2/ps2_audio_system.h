@@ -165,8 +165,8 @@ typedef struct {
     // Mixer output buffer (stereo interleaved)
     int16_t mixBuffer[MIX_BUFFER_SAMPLES * 2];
 
-    // Mixer accumulator (int32 stereo interleaved, clamped once at end of mixAudio)
-    int32_t mixAccum[MIX_BUFFER_SAMPLES * 2];
+    // Mixer accumulator (int32 mono; duplicated to L/R at clamp step)
+    int32_t mixAccum[MIX_BUFFER_SAMPLES];
 
     float masterGain;
     bool initialized;
