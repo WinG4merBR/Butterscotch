@@ -3711,9 +3711,9 @@ void VM_free(VMContext* ctx) {
     // Free V17+ static tracking
     free(ctx->staticInitialized);
 
-    // Free per-CodeLocals varID -> slot maps (BC17+ only; nullptr otherwise)
+    // Free per-code varID -> slot maps (BC17+ only; nullptr otherwise).
     if (ctx->codeLocalsSlotMaps != nullptr) {
-        repeat(ctx->dataWin->func.codeLocalsCount, i) {
+        repeat(ctx->dataWin->code.count, i) {
             hmfree(ctx->codeLocalsSlotMaps[i]);
         }
         free(ctx->codeLocalsSlotMaps);
