@@ -16,9 +16,13 @@ typedef struct {
     int16_t gridWidth;
     int16_t gridHeight;
     int32_t* dirtyInstances;
-    // Grid[x][y] of instance IDs
-    int32_t*** grid;
+    // Flat 2D grid of instance ID stb_ds arrays
+    int32_t** grid;
 } SpatialGrid;
+
+static inline int32_t SpatialGrid_cellIndex(SpatialGrid* grid, int32_t x, int32_t y) {
+    return (y * grid->gridWidth) + x;
+}
 
 static inline uint32_t SpatialGrid_packGridCoordinates(uint16_t gridX, uint16_t gridY) {
     return ((uint32_t) gridX << 16) | gridY;

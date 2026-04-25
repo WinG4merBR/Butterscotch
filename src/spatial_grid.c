@@ -19,20 +19,15 @@ SpatialGrid* SpatialGrid_create(uint32_t roomWidth, uint32_t roomHeight) {
     grid->gridWidth = gridWidth;
     grid->gridHeight = gridHeight;
 
-    grid->grid = safeCalloc(gridWidth, sizeof(int32_t*));
-    repeat(gridWidth, i) {
-        grid->grid[i] = safeCalloc(gridHeight, sizeof(int32_t*));
-    }
+    grid->grid = safeCalloc(gridWidth * gridHeight, sizeof(int32_t*));
 
     return grid;
 }
 
 void SpatialGrid_free(SpatialGrid* grid) {
-    repeat(grid->gridWidth, i) {
-        repeat(grid->gridHeight, j) {
-            arrfree(grid->grid[i][j]);
-        }
-        free(grid->grid[i]);
+    int32_t totalCells = grid->gridWidth * grid->gridHeight;
+    repeat(totalCells, i) {
+        arrfree(grid->grid[i]);
     }
     free(grid->grid);
     free(grid);
@@ -43,10 +38,10 @@ static void removeInstanceFromGridCells(SpatialGrid* grid, Instance* instance) {
         uint32_t gridCoordinates = instance->collisionCells[i];
         int32_t gridX = SpatialGrid_unpackGridX(gridCoordinates);
         int32_t gridY = SpatialGrid_unpackGridY(gridCoordinates);
-        int32_t* cell = grid->grid[gridX][gridY];
-        repeat(arrlen(cell), j) {
-            if (cell[j] == instance->instanceId) {
-                arrdel(grid->grid[gridX][gridY], j);
+        int32_t cellIndex = SpatialGrid_cellIndex(grid, gridX, gridY);
+        repeat(arrlen(grid->grid[cellIndex]), j) {
+            if (grid->grid[cellIndex][j] == instance->instanceId) {
+                arrdel(grid->grid[ci], j);
                 break;
             }
         }
@@ -84,7 +79,7 @@ void SpatialGrid_syncGrid(Runner* runner, SpatialGrid* grid) {
 
         for (int32_t gx = range.minGridX; range.maxGridX >= gx; gx++) {
             for (int32_t gy = range.minGridY; range.maxGridY >= gy; gy++) {
-                arrput(grid->grid[gx][gy], instance->instanceId);
+                arrput(grid->grid[SpatialGrid_cellIndex(grid, gx, gy)], instance->instanceId);
                 arrput(instance->collisionCells, SpatialGrid_packGridCoordinates(gx, gy));
             }
         }

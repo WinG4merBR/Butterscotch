@@ -5709,7 +5709,7 @@ static RValue builtinInstancePlace(VMContext* ctx, RValue* args, int32_t argCoun
 
         for (int32_t gx = callerRange.minGridX; callerRange.maxGridX >= gx && resultId == INSTANCE_NOONE; gx++) {
             for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
-                int32_t* cell = runner->spatialGrid->grid[gx][gy];
+                int32_t* cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
                 int32_t cellLen = (int32_t) arrlen(cell);
                 for (int32_t ci = 0; cellLen > ci; ci++) {
                     Instance* other = hmget(runner->instancesToId, cell[ci]);
