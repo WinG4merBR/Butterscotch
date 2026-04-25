@@ -292,6 +292,7 @@ typedef struct Runner {
     // Each call pushes its snapshot (append) and pops on normal loop exit; nesting is safe because pushes/pops are LIFO and outer ranges stay untouched under newer pushes.
     Instance** instanceSnapshots;
     SpatialGrid* spatialGrid;
+    uint32_t collisionQueryCounter;
     int32_t pendingRoom;  // -1 = none
     bool gameStartFired;
     int frameCount;

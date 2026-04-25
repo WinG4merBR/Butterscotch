@@ -5703,25 +5703,33 @@ static RValue builtinInstancePlace(VMContext* ctx, RValue* args, int32_t argCoun
 
     if (callerBBox.valid) {
         SpatialGridRange callerRange = SpatialGrid_computeCellRange(runner->spatialGrid, callerBBox.left, callerBBox.top, callerBBox.right, callerBBox.bottom);
+        bool filterByObject = targetObjIndex >= 0 && 100000 > targetObjIndex;
+        bool filterByInstanceId = targetObjIndex >= 100000;
+        uint32_t queryId = ++runner->collisionQueryCounter;
 
-        int32_t snapBase = Runner_pushInstancesForTarget(runner, targetObjIndex);
-        int32_t snapEnd  = (int32_t) arrlen(runner->instanceSnapshots);
-        for (int32_t i = snapBase; snapEnd > i; i++) {
-            Instance* other = runner->instanceSnapshots[i];
-            if (!other->active || other == caller) continue;
+        for (int32_t gx = callerRange.minGridX; callerRange.maxGridX >= gx && resultId == INSTANCE_NOONE; gx++) {
+            for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
+                int32_t* cell = runner->spatialGrid->grid[gx][gy];
+                int32_t cellLen = (int32_t) arrlen(cell);
+                for (int32_t ci = 0; cellLen > ci; ci++) {
+                    Instance* other = hmget(runner->instancesToId, cell[ci]);
+                    if (other == nullptr || !other->active || other == caller) continue;
+                    if (other->lastCollisionQueryId == queryId) continue;
+                    other->lastCollisionQueryId = queryId;
 
-            if (!SpatialGrid_instanceOverlapsRange(other, callerRange))
-                continue;
+                    if (filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, targetObjIndex)) continue;
+                    if (filterByInstanceId && other->instanceId != (uint32_t) targetObjIndex) continue;
 
-            InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
-            if (!otherBBox.valid) continue;
+                    InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
+                    if (!otherBBox.valid) continue;
 
-            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
-                resultId = other->instanceId;
-                break;
+                    if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+                        resultId = other->instanceId;
+                        break;
+                    }
+                }
             }
         }
-        Runner_popInstanceSnapshot(runner, snapBase);
     }
 
     caller->x = savedX;
