@@ -446,7 +446,13 @@ static int compareDrawableDepth(const void* a, const void* b) {
     return 0;
 }
 
+static inline bool Runner_hasAnyObjectWithHandler(Runner* runner, int32_t type, int32_t subtype) {
+    return EventSlotMap_lookup(&runner->eventSlotMap, type, subtype) > 0;
+}
+
 static void fireDrawSubtype(Runner* runner, Drawable* drawables, int32_t drawableCount, int32_t subtype) {
+    if (!Runner_hasAnyObjectWithHandler(runner, EVENT_DRAW, subtype)) return;
+
     repeat(drawableCount, i) {
         Drawable* d = &drawables[i];
         if (d->type != DRAWABLE_INSTANCE)
