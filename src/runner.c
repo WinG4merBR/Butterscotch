@@ -287,13 +287,8 @@ const char* Runner_getEventName(int32_t eventType, int32_t eventSubtype) {
     }
 }
 
-void Runner_executeEventFromObject(Runner* runner, Instance* instance, int32_t startObjectIndex, int32_t eventType, int32_t eventSubtype) {
-    int32_t ownerObjectIndex = -1;
-    int32_t codeId = findEventCodeIdAndOwner(runner, startObjectIndex, eventType, eventSubtype, &ownerObjectIndex);
-    // Fast path: If the codeId is invalid, let's bail out fast
-    // This is the same check that is in the executeCode, but we avoid the need of loading and saving the variables
-    if (0 > codeId)
-        return;
+// Executes an already-resolved event handler (see findEventCodeIdAndOwner) and verified codeId >= 0.
+static void Runner_executeResolvedEvent(Runner* runner, Instance* instance, int32_t eventType, int32_t eventSubtype, int32_t codeId, int32_t ownerObjectIndex) {
     VMContext* vm = runner->vmContext;
     int32_t savedEventType = vm->currentEventType;
     int32_t savedEventSubtype = vm->currentEventSubtype;
@@ -325,6 +320,16 @@ void Runner_executeEventFromObject(Runner* runner, Instance* instance, int32_t s
     vm->currentEventType = savedEventType;
     vm->currentEventSubtype = savedEventSubtype;
     vm->currentEventObjectIndex = savedEventObjectIndex;
+}
+
+void Runner_executeEventFromObject(Runner* runner, Instance* instance, int32_t startObjectIndex, int32_t eventType, int32_t eventSubtype) {
+    int32_t ownerObjectIndex = -1;
+    int32_t codeId = findEventCodeIdAndOwner(runner, startObjectIndex, eventType, eventSubtype, &ownerObjectIndex);
+    // Fast path: If the codeId is invalid, let's bail out fast
+    // This way can avoid the need of loading and saving the current state variables
+    if (0 > codeId)
+        return;
+    Runner_executeResolvedEvent(runner, instance, eventType, eventSubtype, codeId, ownerObjectIndex);
 }
 
 void Runner_executeEvent(Runner* runner, Instance* instance, int32_t eventType, int32_t eventSubtype) {
@@ -662,9 +667,10 @@ void Runner_draw(Runner* runner) {
             Instance* inst = d->instance;
             // Filter inactive/invisible instances at draw time so the cache doesn't need invalidation when those flags toggle.
             if (!inst->active || !inst->visible) continue;
-            int32_t codeId = findEventCodeIdAndOwner(runner, inst->objectIndex, EVENT_DRAW, DRAW_NORMAL, nullptr);
+            int32_t ownerObjectIndex = -1;
+            int32_t codeId = findEventCodeIdAndOwner(runner, inst->objectIndex, EVENT_DRAW, DRAW_NORMAL, &ownerObjectIndex);
             if (codeId >= 0) {
-                Runner_executeEvent(runner, inst, EVENT_DRAW, DRAW_NORMAL);
+                Runner_executeResolvedEvent(runner, inst, EVENT_DRAW, DRAW_NORMAL, codeId, ownerObjectIndex);
             } else if (runner->renderer != nullptr) {
                 Renderer_drawSelf(runner->renderer, inst);
             }
