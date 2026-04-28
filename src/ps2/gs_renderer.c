@@ -1814,6 +1814,9 @@ static void gsGpuSetBlendModeExt(Renderer* renderer, int32_t sfactor, int32_t df
 }
 
 static void gsGpuSetBlendEnable(Renderer* renderer, bool enable) {
+    GsRenderer* gs = (GsRenderer*) renderer;
+    GSGLOBAL* gsGlobal = gs->gsGlobal;
+    
     gsGlobal->PrimAlphaEnable = enable ? GS_SETTING_ON : GS_SETTING_OFF;
 }
 
