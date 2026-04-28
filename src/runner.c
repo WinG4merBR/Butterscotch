@@ -342,9 +342,12 @@ static bool eventUsesBC17PerObjectDispatch(int32_t eventType) {
     return eventType == EVENT_STEP || eventType == EVENT_ALARM || eventType == EVENT_KEYBOARD || eventType == EVENT_KEYPRESS || eventType == EVENT_KEYRELEASE;
 }
 
+static inline bool Runner_hasAnyObjectWithHandler(Runner* runner, int32_t type, int32_t subtype) {
+    return EventSlotMap_lookup(&runner->eventSlotMap, type, subtype) > 0;
+}
+
 void Runner_executeEventForAll(Runner* runner, int32_t eventType, int32_t eventSubtype) {
-    int32_t slot = EventSlotMap_lookup(&runner->eventSlotMap, eventType, eventSubtype);
-    if (0 > slot) return; // no object in this DataWin responds to (eventType, eventSubtype)
+    if (!Runner_hasAnyObjectWithHandler(runner, eventType, eventSubtype)) return;
 
     // We always snapshot the iteration list before dispatching so instances spawned during this phase do NOT fire the current event.
     Instance** scratch = runner->eventDispatchInstances;
@@ -453,13 +456,8 @@ static int compareDrawableDepth(const void* a, const void* b) {
     return 0;
 }
 
-static inline bool Runner_hasAnyObjectWithHandler(Runner* runner, int32_t type, int32_t subtype) {
-    return EventSlotMap_lookup(&runner->eventSlotMap, type, subtype) > 0;
-}
-
 static void fireDrawSubtype(Runner* runner, Drawable* drawables, int32_t drawableCount, int32_t subtype) {
-    int32_t slot = EventSlotMap_lookup(&runner->eventSlotMap, EVENT_DRAW, subtype);
-    if (0 > slot) return;
+    if (!Runner_hasAnyObjectWithHandler(runner, EVENT_DRAW, subtype)) return;
 
     repeat(drawableCount, i) {
         Drawable* d = &drawables[i];
