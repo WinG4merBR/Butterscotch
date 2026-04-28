@@ -165,7 +165,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"lazy-rooms", no_argument, nullptr, 'z'},
         {"eager-room", required_argument, nullptr, 'G'},
         {"os-type", required_argument, nullptr, 'O'},
-        {"profiler", required_argument, nullptr, 'q'},
+        {"gml-profiler", required_argument, nullptr, 'q'},
 #ifdef ENABLE_VM_OPCODE_PROFILER
         {"opcode-profiler", no_argument, nullptr, 'Q'},
 #endif
@@ -334,7 +334,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 char* endPtr;
                 long framesBetween = strtol(optarg, &endPtr, 10);
                 if (*endPtr != '\0' || framesBetween <= 0) {
-                    fprintf(stderr, "Error: Invalid frame count '%s' for --profiler (must be > 0)\n", optarg);
+                    fprintf(stderr, "Error: Invalid frame count '%s' for --gml-profiler (must be > 0)\n", optarg);
                     exit(1);
                 }
                 args->profilerFramesBetween = (int) framesBetween;

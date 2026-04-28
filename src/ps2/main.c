@@ -723,7 +723,7 @@ int main(int argc, char* argv[]) {
     uint16_t prevOverlayPadButtons = 0xFFFF;
     int profilerFramesInWindow = 0;
     static const int PROFILER_WINDOW_FRAMES = 60;
-#ifdef ENABLE_VM_PROFILER
+#ifdef ENABLE_VM_GML_PROFILER
     char profilerOverlayText[4096];
 #endif
     while (!runner->shouldExit) {
@@ -787,7 +787,7 @@ int main(int argc, char* argv[]) {
 
         if (RunnerKeyboard_checkPressed(runner->keyboard, VK_F12)) {
             debugOverlayState = (debugOverlayState + 1) % 3;
-#ifdef ENABLE_VM_PROFILER
+#ifdef ENABLE_VM_GML_PROFILER
             Profiler_setEnabled(&vm->profiler, debugOverlayState == 1);
             profilerFramesInWindow = 0;
             profilerOverlayText[0] = '\0';
@@ -934,7 +934,7 @@ int main(int argc, char* argv[]) {
             if (debugOverlayState == 1) {
                 float profilerY = 10.0f + (15.6f * 10.0f) + 6.0f;
 
-#ifdef ENABLE_VM_PROFILER
+#ifdef ENABLE_VM_GML_PROFILER
                 profilerFramesInWindow++;
                 if (profilerFramesInWindow >= PROFILER_WINDOW_FRAMES) {
                     char* profilerReport = Profiler_createReport(vm->profiler, 25, profilerFramesInWindow);

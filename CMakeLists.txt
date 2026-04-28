@@ -47,9 +47,9 @@ target_include_directories(butterscotch PUBLIC vendor/stb/ds)
 
 if(PLATFORM STREQUAL "glfw")
     # Butterscotch VM/interpreter profiler
-    option(ENABLE_VM_PROFILER "Enable Butterscotch VM/interpreter profiler" ON)
-    if(ENABLE_VM_PROFILER)
-        add_compile_definitions(ENABLE_VM_PROFILER)
+    option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" ON)
+    if(ENABLE_VM_GML_PROFILER)
+        add_compile_definitions(ENABLE_VM_GML_PROFILER)
     endif()
 
     # Butterscotch VM/interpreter tracing
@@ -137,9 +137,9 @@ elseif(PLATFORM STREQUAL "ps2")
     add_compile_definitions(NO_RVALUE_INT64)
 
     # Butterscotch VM/interpreter profiler
-    option(ENABLE_VM_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
-    if(ENABLE_VM_PROFILER)
-        add_compile_definitions(ENABLE_VM_PROFILER)
+    option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
+    if(ENABLE_VM_GML_PROFILER)
+        add_compile_definitions(ENABLE_VM_GML_PROFILER)
     endif()
 
     # Butterscotch VM/interpreter tracing
