@@ -2825,9 +2825,35 @@ static RValue executeLoop(VMContext* ctx) {
             }
 
             // Comparison
-            case OP_CMP:
-                handleCmp(ctx, instr);
+            case OP_CMP: {
+                RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
+                RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
+
+                // Inline fast path for INT32/INT32 because ~60% of all Cmps were INT32/INT32 during real workloads
+                if (slotA->type == RVALUE_INT32 && slotB->type == RVALUE_INT32) {
+                    int32_t a = slotA->int32;
+                    int32_t b = slotB->int32;
+                    bool result;
+                    switch (instrCmpKind(instr)) {
+                        case CMP_LT:  result = b > a;  break;
+                        case CMP_LTE: result = b >= a; break;
+                        case CMP_EQ:  result = a == b; break;
+                        case CMP_NEQ: result = a != b; break;
+                        case CMP_GTE: result = a >= b; break;
+                        case CMP_GT:  result = a > b;  break;
+                        default:      result = false;  break;
+                    }
+                    slotA->int32 = result ? 1 : 0;
+                    slotA->type = RVALUE_BOOL;
+#if IS_BC17_OR_HIGHER_ENABLED
+                    if (IS_BC17_OR_HIGHER(ctx)) slotA->gmlStackType = GML_TYPE_BOOL;
+#endif
+                    ctx->stack.top--;
+                } else {
+                    handleCmp(ctx, instr);
+                }
                 break;
+            }
 
             // Duplicate
             case OP_DUP:
