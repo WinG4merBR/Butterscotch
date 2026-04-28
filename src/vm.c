@@ -2341,6 +2341,178 @@ static const char* opcodeName(uint8_t opcode) {
     }
 }
 
+#ifdef ENABLE_VM_OPCODE_PROFILER
+static char gmlTypeChar(uint8_t type);
+
+static const char* rvalueTypeName(uint8_t type) {
+    switch (type) {
+        case RVALUE_REAL:      return "REAL";
+        case RVALUE_STRING:    return "STRING";
+        case RVALUE_INT32:     return "INT32";
+        case RVALUE_INT64:     return "INT64";
+        case RVALUE_BOOL:      return "BOOL";
+        case RVALUE_UNDEFINED: return "UNDEF";
+        case RVALUE_ARRAY:     return "ARRAY";
+        case RVALUE_METHOD:    return "METHOD";
+        case 0xF:              return "-";
+        default:               return "???";
+    }
+}
+
+static const char* breakSubOpName(int16_t breakType) {
+    switch (breakType) {
+        case BREAK_CHKINDEX:    return "chkindex";
+        case BREAK_PUSHAF:      return "pushaf";
+        case BREAK_POPAF:       return "popaf";
+        case BREAK_PUSHAC:      return "pushac";
+        case BREAK_SETOWNER:    return "setowner";
+        case BREAK_ISSTATICOK:  return "isstaticok";
+        case BREAK_SETSTATIC:   return "setstatic";
+        case BREAK_SAVEAREF:    return "savearef";
+        case BREAK_RESTOREAREF: return "restorearef";
+        default:                return "???";
+    }
+}
+
+void VM_printOpcodeProfilerReport(const VMContext* ctx) {
+    if (!ctx->opcodeProfilerEnabled) return;
+
+    typedef struct { uint16_t key; uint64_t count; } CountEntry;
+    CountEntry entries[256];
+    int entryCount = 0;
+    uint64_t total = 0;
+    for (int i = 0; 256 > i; i++) {
+        if (ctx->opcodeCounts[i] > 0) {
+            entries[entryCount].key = (uint16_t) i;
+            entries[entryCount].count = ctx->opcodeCounts[i];
+            entryCount++;
+            total += ctx->opcodeCounts[i];
+        }
+    }
+
+    // Simple insertion sort (max 256 entries, runs once at shutdown)
+    for (int i = 1; entryCount > i; i++) {
+        CountEntry tmp = entries[i];
+        int j = i;
+        while (j > 0 && entries[j - 1].count < tmp.count) {
+            entries[j] = entries[j - 1];
+            j--;
+        }
+        entries[j] = tmp;
+    }
+
+    fprintf(stderr, "=== Opcode Profiler Report ===\n");
+    fprintf(stderr, "Total instructions executed: %llu\n", (unsigned long long) total);
+    fprintf(stderr, "%-12s %-6s %16s %8s\n", "Opcode", "Hex", "Count", "Pct");
+    forEachIndexed(CountEntry, entry, i, entries, entryCount) {
+        (void) i;
+        double pct = total > 0 ? (100.0 * (double) entry->count / (double) total) : 0.0;
+        fprintf(stderr, "%-12s 0x%02X   %16llu %7.2f%%\n", opcodeName((uint8_t) entry->key), (uint8_t) entry->key, (unsigned long long) entry->count, pct);
+    }
+
+    // Per-opcode breakdown by type variant. Sorted within each opcode by count desc.
+    fprintf(stderr, "\n--- Type variant breakdown (per opcode) ---\n");
+    forEachIndexed(CountEntry, entry, idx, entries, entryCount) {
+        (void) idx;
+        uint8_t opcode = (uint8_t) entry->key;
+        const uint64_t* variants = &ctx->opcodeVariantCounts[opcode * 256];
+
+        CountEntry variantEntries[256];
+        int variantCount = 0;
+        for (int t = 0; 256 > t; t++) {
+            if (variants[t] > 0) {
+                variantEntries[variantCount].key = (uint16_t) t;
+                variantEntries[variantCount].count = variants[t];
+                variantCount++;
+            }
+        }
+        for (int i = 1; variantCount > i; i++) {
+            CountEntry tmp = variantEntries[i];
+            int j = i;
+            while (j > 0 && variantEntries[j - 1].count < tmp.count) {
+                variantEntries[j] = variantEntries[j - 1];
+                j--;
+            }
+            variantEntries[j] = tmp;
+        }
+
+        fprintf(stderr, "%s (0x%02X): %llu total\n", opcodeName(opcode), opcode, (unsigned long long) entry->count);
+        forEachIndexed(CountEntry, ve, vi, variantEntries, variantCount) {
+            (void) vi;
+            uint8_t type1 = (uint8_t) ((ve->key >> 4) & 0xF);
+            uint8_t type2 = (uint8_t) (ve->key & 0xF);
+            double vpct = entry->count > 0 ? (100.0 * (double) ve->count / (double) entry->count) : 0.0;
+            fprintf(stderr, "    .%c.%c  %16llu %7.2f%%\n", gmlTypeChar(type1), gmlTypeChar(type2), (unsigned long long) ve->count, vpct);
+        }
+
+        // Runtime RValue type breakdown (a, b types observed at execution time)
+        {
+            const uint64_t* rvCounts = &ctx->opcodeRValueTypeCounts[opcode * 256];
+            CountEntry rvEntries[256];
+            int rvCount = 0;
+            uint64_t rvTotal = 0;
+            for (int t = 0; 256 > t; t++) {
+                if (rvCounts[t] > 0) {
+                    rvEntries[rvCount].key = (uint16_t) t;
+                    rvEntries[rvCount].count = rvCounts[t];
+                    rvCount++;
+                    rvTotal += rvCounts[t];
+                }
+            }
+            if (rvCount > 0) {
+                for (int i = 1; rvCount > i; i++) {
+                    CountEntry tmp = rvEntries[i];
+                    int j = i;
+                    while (j > 0 && rvEntries[j - 1].count < tmp.count) {
+                        rvEntries[j] = rvEntries[j - 1];
+                        j--;
+                    }
+                    rvEntries[j] = tmp;
+                }
+                fprintf(stderr, "    -- runtime types (a, b):\n");
+                forEachIndexed(CountEntry, re, ri, rvEntries, rvCount) {
+                    (void) ri;
+                    uint8_t typeA = (uint8_t) ((re->key >> 4) & 0xF);
+                    uint8_t typeB = (uint8_t) (re->key & 0xF);
+                    double rpct = rvTotal > 0 ? (100.0 * (double) re->count / (double) rvTotal) : 0.0;
+                    fprintf(stderr, "    (%-6s, %-6s) %16llu %7.2f%%\n", rvalueTypeName(typeA), rvalueTypeName(typeB), (unsigned long long) re->count, rpct);
+                }
+            }
+        }
+
+        // Extended BREAK (0xFF) sub-opcode breakdown
+        if (opcode == OP_BREAK) {
+            CountEntry breakEntries[64];
+            int breakCount = 0;
+            for (int i = 0; 64 > i; i++) {
+                if (ctx->breakSubOpCounts[i] > 0) {
+                    breakEntries[breakCount].key = (uint16_t) i;
+                    breakEntries[breakCount].count = ctx->breakSubOpCounts[i];
+                    breakCount++;
+                }
+            }
+            for (int i = 1; breakCount > i; i++) {
+                CountEntry tmp = breakEntries[i];
+                int j = i;
+                while (j > 0 && breakEntries[j - 1].count < tmp.count) {
+                    breakEntries[j] = breakEntries[j - 1];
+                    j--;
+                }
+                breakEntries[j] = tmp;
+            }
+            fprintf(stderr, "    -- sub-opcodes:\n");
+            forEachIndexed(CountEntry, be, bi, breakEntries, breakCount) {
+                (void) bi;
+                int16_t breakType = (int16_t) -((int) be->key);
+                double bpct = entry->count > 0 ? (100.0 * (double) be->count / (double) entry->count) : 0.0;
+                fprintf(stderr, "    %-12s (%4d) %16llu %7.2f%%\n", breakSubOpName(breakType), (int) breakType, (unsigned long long) be->count, bpct);
+            }
+        }
+    }
+    fprintf(stderr, "==============================\n");
+}
+#endif // ENABLE_VM_OPCODE_PROFILER
+
 // Forward declaration for formatInstruction (defined in disassembler section, used by trace-opcodes)
 static void formatInstruction(VMContext* ctx, const uint8_t* bytecodeBase, uint32_t instrAddr, uint32_t instr, const uint8_t* extraData, char* opcodeStr, size_t opcodeSize, char* operandStr, size_t operandSize, char* commentStr, size_t commentSize);
 
@@ -2499,6 +2671,41 @@ static RValue executeLoop(VMContext* ctx) {
         }
 
         uint8_t opcode = instrOpcode(instr);
+
+#ifdef ENABLE_VM_OPCODE_PROFILER
+        if (ctx->opcodeProfilerEnabled) {
+            ctx->opcodeCounts[opcode]++;
+            ctx->opcodeVariantCounts[opcode * 256 + instrType1(instr) * 16 + instrType2(instr)]++;
+            if (opcode == OP_BREAK) {
+                int16_t breakType = instrInstanceType(instr);
+                int idx = -breakType;
+                if (idx >= 0 && 64 > idx) {
+                    ctx->breakSubOpCounts[idx]++;
+                }
+            }
+            // Capture actual runtime RValue types for arithmetic/comparison/conversion ops.
+            // typeB = 0xF sentinel for unary ops (no second operand).
+            uint8_t rvTypeA = 0xFF, rvTypeB = 0xF;
+            switch (opcode) {
+                case OP_MUL: case OP_DIV: case OP_REM: case OP_MOD:
+                case OP_ADD: case OP_SUB: case OP_AND: case OP_OR:
+                case OP_XOR: case OP_SHL: case OP_SHR: case OP_CMP:
+                    if (ctx->stack.top >= 2) {
+                        rvTypeA = ctx->stack.slots[ctx->stack.top - 2].type;
+                        rvTypeB = ctx->stack.slots[ctx->stack.top - 1].type;
+                    }
+                    break;
+                case OP_NEG: case OP_NOT: case OP_CONV:
+                    if (ctx->stack.top >= 1) {
+                        rvTypeA = ctx->stack.slots[ctx->stack.top - 1].type;
+                    }
+                    break;
+            }
+            if (rvTypeA != 0xFF) {
+                ctx->opcodeRValueTypeCounts[opcode * 256 + (rvTypeA & 0xF) * 16 + (rvTypeB & 0xF)]++;
+            }
+        }
+#endif
 
 #ifdef ENABLE_VM_TRACING
         if (shlen(ctx->opcodesToBeTraced) > 0 && ctx->runner->frameCount >= ctx->traceBytecodeAfterFrame) {
@@ -3638,6 +3845,13 @@ void VM_free(VMContext* ctx) {
     // Free profiler (no-op if never enabled)
     Profiler_destroy(ctx->profiler);
     ctx->profiler = nullptr;
+
+#ifdef ENABLE_VM_OPCODE_PROFILER
+    free(ctx->opcodeVariantCounts);
+    ctx->opcodeVariantCounts = nullptr;
+    free(ctx->opcodeRValueTypeCounts);
+    ctx->opcodeRValueTypeCounts = nullptr;
+#endif
 
     // Free global vars array itself
     free(ctx->globalVars);

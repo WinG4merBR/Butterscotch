@@ -58,6 +58,12 @@ if(PLATFORM STREQUAL "glfw")
         add_compile_definitions(ENABLE_VM_TRACING)
     endif()
 
+    # Butterscotch VM opcode count profiler
+    option(ENABLE_VM_OPCODE_PROFILER "Enable Butterscotch VM opcode count profiler" ON)
+    if(ENABLE_VM_OPCODE_PROFILER)
+        add_compile_definitions(ENABLE_VM_OPCODE_PROFILER)
+    endif()
+
     # Spatial grid logs
     option(ENABLE_SPATIAL_GRID_LOGS "Enable Spatial Grid logs" OFF)
     if(ENABLE_SPATIAL_GRID_LOGS)
@@ -140,6 +146,12 @@ elseif(PLATFORM STREQUAL "ps2")
     option(ENABLE_VM_TRACING "Enable Butterscotch VM/interpreter tracing checks" OFF)
     if(ENABLE_VM_TRACING)
         add_compile_definitions(ENABLE_VM_TRACING)
+    endif()
+
+    # Butterscotch VM opcode count profiler
+    option(ENABLE_VM_OPCODE_PROFILER "Enable Butterscotch VM opcode count profiler" OFF)
+    if(ENABLE_VM_OPCODE_PROFILER)
+        add_compile_definitions(ENABLE_VM_OPCODE_PROFILER)
     endif()
 
     # Spatial grid logs

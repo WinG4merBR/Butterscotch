@@ -96,6 +96,7 @@ The GLFW target has a lot of nifty CLI parameters that you can use to trace and 
 * `--playback-inputs`: Playbacks user inputs
 * `--os-type`: Allows changing the built-in `os_type` value. The default is Windows. Example: When running Undertale Xbox, you would need to set it to `--os-type xboxone`.
 * `--profiler`: Logs which GML scripts are the heaviest in terms of time and executed instructions.
+* `--opcode-profiler`: Ranks which GML opcodes were executed the most.
 
 ## Debug Features
 

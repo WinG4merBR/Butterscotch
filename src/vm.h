@@ -241,6 +241,19 @@ typedef struct VMContext {
 #endif
     Profiler* profiler;
 
+#ifdef ENABLE_VM_OPCODE_PROFILER
+    bool opcodeProfilerEnabled;
+    uint64_t opcodeCounts[256];
+    // Per-opcode breakdown by (type1, type2). Heap-allocated when the profiler is enabled (512 KB), nullptr otherwise.
+    // Indexed as opcodeVariantCounts[opcode * 256 + type1 * 16 + type2].
+    uint64_t* opcodeVariantCounts;
+    // BREAK (0xFF) sub-opcode counts. Indexed by -breakType (so -1 -> [1], -9 -> [9]). Size 64 covers all currently defined sub-ops with room to spare.
+    uint64_t breakSubOpCounts[64];
+    // Per-opcode breakdown by actual runtime RValue types (typeA, typeB) for arithmetic/comparison/conversion ops.
+    // Indexed as opcodeRValueTypeCounts[opcode * 256 + typeA * 16 + typeB]. typeB = 0xF for unary ops. 512 KB heap-allocated.
+    uint64_t* opcodeRValueTypeCounts;
+#endif
+
     // Stack at the end because it is a big chunky boi (we don't want it pushing fields around)
     VMStack stack;
 } VMContext;
@@ -254,6 +267,10 @@ void VM_free(VMContext* ctx);
 bool VM_isObjectOrDescendant(DataWin* dataWin, int32_t objectIndex, int32_t targetObjectIndex);
 void VM_buildCrossReferences(VMContext* ctx);
 void VM_disassemble(VMContext* ctx, int32_t codeIndex);
+#ifdef ENABLE_VM_OPCODE_PROFILER
+// Prints a sorted summary of opcode execution counts to stderr. Does nothing if the opcode profiler was never enabled.
+void VM_printOpcodeProfilerReport(const VMContext* ctx);
+#endif
 void VM_registerBuiltin(VMContext* ctx, const char* name, BuiltinFunc func);
 BuiltinFunc VM_findBuiltin(VMContext* ctx, const char* name);
 RValue VM_createArray(VMContext* ctx);

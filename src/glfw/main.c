@@ -77,6 +77,9 @@ typedef struct {
     bool lazyRooms;
     StringBooleanEntry* eagerRooms; // stb_ds string-keyed set of room names
     int profilerFramesBetween; // 0 = disabled
+#ifdef ENABLE_VM_OPCODE_PROFILER
+    bool opcodeProfiler;
+#endif
 } CommandLineArgs;
 
 typedef struct { const char* name; YoYoOperatingSystem value; } OsTypeNameEntry;
@@ -163,6 +166,9 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"eager-room", required_argument, nullptr, 'G'},
         {"os-type", required_argument, nullptr, 'O'},
         {"profiler", required_argument, nullptr, 'q'},
+#ifdef ENABLE_VM_OPCODE_PROFILER
+        {"opcode-profiler", no_argument, nullptr, 'Q'},
+#endif
         {nullptr,               0,                 nullptr,  0 }
     };
 
@@ -334,6 +340,11 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                 args->profilerFramesBetween = (int) framesBetween;
                 break;
             }
+#ifdef ENABLE_VM_OPCODE_PROFILER
+            case 'Q':
+                args->opcodeProfiler = true;
+                break;
+#endif
             case 'O':
                 if (!parseOsTypeArg(optarg, &args->osType)) {
                     fprintf(stderr, "Error: Invalid --os-type value '%s' (expected: ", optarg);
@@ -560,6 +571,13 @@ int main(int argc, char* argv[]) {
     VMContext* vm = VM_create(dataWin);
 
     Profiler_setEnabled(&vm->profiler, args.profilerFramesBetween > 0);
+#ifdef ENABLE_VM_OPCODE_PROFILER
+    vm->opcodeProfilerEnabled = args.opcodeProfiler;
+    if (vm->opcodeProfilerEnabled) {
+        vm->opcodeVariantCounts = safeCalloc(256 * 256, sizeof(uint64_t));
+        vm->opcodeRValueTypeCounts = safeCalloc(256 * 256, sizeof(uint64_t));
+    }
+#endif
 
     if (args.hasSeed) {
         srand((unsigned int) args.seed);
@@ -1087,6 +1105,9 @@ int main(int argc, char* argv[]) {
 
     Runner_free(runner);
     GlfwFileSystem_destroy(glfwFileSystem);
+#ifdef ENABLE_VM_OPCODE_PROFILER
+    VM_printOpcodeProfilerReport(vm);
+#endif
     VM_free(vm);
     DataWin_free(dataWin);
 
