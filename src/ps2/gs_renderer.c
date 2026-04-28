@@ -1847,15 +1847,16 @@ static void gsGpuSetAlphaTestRef(Renderer* renderer, uint8_t ref) {
     gsKit_set_test(gsGlobal, gsGlobal->Test->ATE ? GS_ATEST_ON : GS_ATEST_OFF);
 }
 
+#include <gsInline.h>
 static void gsGpuSetColorWriteEnable(Renderer* renderer, bool red, bool green, bool blue, bool alpha) {
     GsRenderer* gs = (GsRenderer*) renderer;
     GSGLOBAL* gsGlobal = gs->gsGlobal;
 
     unsigned int mask = 0;
-    if (r_enabled == false) mask |= 0xff;
-    if (g_enabled == false) mask |= 0xff00;
-    if (b_enabled == false) mask |= 0xff0000;
-    if (a_enabled == false) mask |= 0xff000000;
+    if (red == false) mask |= 0xff;
+    if (green == false) mask |= 0xff00;
+    if (blue == false) mask |= 0xff0000;
+    if (alpha == false) mask |= 0xff000000;
 
     u64 *p_data;
 	u64 *p_store;
