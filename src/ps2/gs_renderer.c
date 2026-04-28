@@ -1806,11 +1806,19 @@ static void gsDeleteSprite(MAYBE_UNUSED Renderer* renderer, MAYBE_UNUSED int32_t
 // However I am not big brained enough to emulate these
 // using the PS2 limitations
 static void gsGpuSetBlendMode(Renderer* renderer, int32_t mode) {
-    // TODO
+    if(mode == bm_normal)
+    {
+        gsKit_set_primalpha(gsGlobal,
+            GS_SETREG_ALPHA(0, 2, 0, 1, 0),
+        0);
+    }
 }
 
 static void gsGpuSetBlendModeExt(Renderer* renderer, int32_t sfactor, int32_t dfactor) {
-    // TODO
+    if(sfactor == bm_dest_alpha && dfactor == bm_inv_dest_alpha)
+    {
+        gsKit_set_primalpha(gsGlobal, GS_SETREG_ALPHA(0, 2, 1, 1, 0), 0);
+    }
 }
 
 static void gsGpuSetBlendEnable(Renderer* renderer, bool enable) {
