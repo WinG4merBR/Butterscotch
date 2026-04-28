@@ -1870,10 +1870,12 @@ static void gsGpuSetColorWriteEnable(Renderer* renderer, bool red, bool green, b
 
 	p_data = p_store = (u64*)gsKit_heap_alloc(gsGlobal, qsize, (qsize * 16), GIF_AD);
 
-    *p_data++ = GS_SETREG_FRAME_1( gsGlobal->ScreenBuffer[0] / 8192, gsGlobal->Width / 64, gsGlobal->PSM, mask );
+    *p_data++ = GS_SETREG_FRAME_1( gsGlobal->ScreenBuffer[gsGlobal->ActiveBuffer & 1] / 8192,
+                                 gsGlobal->Width / 64, gsGlobal->PSM, mask );
 	*p_data++ = GS_FRAME_1;
 
-    *p_data++ = GS_SETREG_FRAME_2( gsGlobal->ScreenBuffer[0] / 8192, gsGlobal->Width / 64, gsGlobal->PSM, mask );
+    *p_data++ = GS_SETREG_FRAME_2( gsGlobal->ScreenBuffer[gsGlobal->ActiveBuffer & 1] / 8192,
+                                 gsGlobal->Width / 64, gsGlobal->PSM, mask );
 	*p_data++ = GS_FRAME_2;
 
 	*p_data++ = GIF_TAG_AD(qsize);
