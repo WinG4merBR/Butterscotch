@@ -296,13 +296,14 @@ int main(int argc, char* argv[]) {
         if (runner->currentRoom->speed < 0) {
             double targetFrameTime = 1.0 / (runner->currentRoom->speed);
             double nextFrameTime = lastFrameTime + targetFrameTime;
-            // Sleep for most of the remaining time, then spin-wait for precision
-            double remaining = nextFrameTime - PS3_GET_TIME;
-            if (remaining > 0.002) {
-                sysUsleep((uint32_t)((remaining - 0.001) * 1000000.0));
-            }
             while (PS3_GET_TIME < nextFrameTime) {
                 // Spin-wait for the remaining sub-millisecond
+                
+                // Sleep for most of the remaining time, then spin-wait for precision
+                double remaining = nextFrameTime - PS3_GET_TIME;
+                if (remaining > 0.002) {
+                    sysUsleep((uint32_t)((remaining - 0.001) * 1000000.0));
+                }
             }
             lastFrameTime = nextFrameTime;
         } else {
