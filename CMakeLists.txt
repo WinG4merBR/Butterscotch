@@ -175,6 +175,9 @@ elseif(PLATFORM STREQUAL "ps3")
     # miniaudio
     target_include_directories(butterscotch PUBLIC vendor/miniaudio)
 
+    # Platform identifier for PS3-specific code paths
+    add_compile_definitions(PLATFORM_PS3)
+
 elseif(PLATFORM STREQUAL "ps2")
     # The PS2 EE has a single-precision FPU only, so double is software-emulated
     add_compile_definitions(USE_FLOAT_REALS)

@@ -328,6 +328,9 @@ void VMBuiltins_checkIfBuiltinVarTableIsSorted(void) {
     }
 }
 
+#if defined(PLATFORM_PS3)
+#include <sys/systime.h>
+#endif
 RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* name, int32_t arrayIndex) {
     Instance* inst = (Instance*) ctx->currentInstance;
     Runner* runner = (Runner*) ctx->runner;
@@ -691,6 +694,8 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
             QueryPerformanceFrequency(&freq);
             QueryPerformanceCounter(&counter);
             GMLReal ms = (GMLReal) counter.QuadPart / (GMLReal) freq.QuadPart * 1000.0;
+            #elif defined(PLATFORM_PS3)
+                return ((double)__builtin_ppc_get_timebase()/(double)sysGetTimebaseFrequency());
             #else
             struct timespec ts;
             clock_gettime(CLOCK_MONOTONIC, &ts);
