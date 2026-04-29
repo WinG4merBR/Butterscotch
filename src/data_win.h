@@ -547,16 +547,13 @@ typedef struct {
     uint32_t color;
 } RoomTile;
 
-enum RoomLayerType : uint32_t
-{
-    RoomLayerType_Path = 0,
-    RoomLayerType_Background = 1,
-    RoomLayerType_Instances = 2,
-    RoomLayerType_Assets = 3,
-    RoomLayerType_Tiles = 4,
-    RoomLayerType_Effect = 6,
-    RoomLayerType_Path2 = 7
-};
+#define RoomLayerType_Path 0
+#define RoomLayerType_Background 1
+#define RoomLayerType_Instances 2
+#define RoomLayerType_Assets 3
+#define RoomLayerType_Tiles 4
+#define RoomLayerType_Effect 6
+#define RoomLayerType_Path2 7
 
 typedef struct {
     const char* name;
