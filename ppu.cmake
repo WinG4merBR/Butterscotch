@@ -31,7 +31,7 @@ SET(CMAKE_SYSTEM_PROCESSOR powerpc)
 SET(CMAKE_C_COMPILER ppu-gcc)
 SET(CMAKE_CXX_COMPILER ppu-g++)
 
-SET(PPU_CFLAGS "-mcpu=cell -maltivec -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections -I$ENV{PS3DEV}/ppu/include -I$ENV{PS3DEV}/ppu/include/simdmath")
+SET(PPU_CFLAGS "-mcpu=cell -maltivec -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections -I$ENV{PS3DEV}/ppu/include -I$ENV{PS3DEV}/portlibs/ppu/include -I$ENV{PS3DEV}/ppu/include/simdmath")
 SET(PPU_CXXFLAGS "-D_GLIBCXX11_USE_C99_STDIO ${PPU_CFLAGS}")
 SET(PPU_LDFLAGS "-mhard-float -fmodulo-sched -Wl,--gc-sections -L$ENV{PS3DEV}/ppu/lib -L$ENV{PS3DEV}/portlibs/ppu/lib -lm -lgcm_sys -lrsx -lsysutil -lio -laudio -lrt -llv2 -lio -laudio")
 
