@@ -294,11 +294,11 @@ int main(int argc, char* argv[]) {
 
         // Limit frame rate to room speed (skip in headless mode for max speed!!)
         if (runner->currentRoom->speed < 0) {
-            double targetFrameTime = 1.0 / (runner->currentRoom->speed);
+            double targetFrameTime = 1.0 / 30;//(runner->currentRoom->speed);
             double nextFrameTime = lastFrameTime + targetFrameTime;
             while (PS3_GET_TIME < nextFrameTime) {
                 // Spin-wait for the remaining sub-millisecond
-                
+
                 // Sleep for most of the remaining time, then spin-wait for precision
                 double remaining = nextFrameTime - PS3_GET_TIME;
                 if (remaining > 0.002) {
