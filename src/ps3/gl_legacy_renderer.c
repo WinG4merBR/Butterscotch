@@ -14,6 +14,8 @@
 #include "utils.h"
 #include "image_decoder.h"
 
+GLAPI void GLAPIENTRY glActiveTexture( GLenum texture ) { return; };
+
 // ===[ Helpers ]===
 static void glApplyViewport(GLLegacyRenderer* gl, int32_t x, int32_t y, int32_t w, int32_t h) {
     int32_t effW, effH;
