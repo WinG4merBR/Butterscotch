@@ -51,7 +51,8 @@ static bool prevState[sizeof(PAD_MAPPINGS) / sizeof(PAD_MAPPINGS[0])] = {0};
 #define DATAWIN_PATH "/dev_hdd0/BUTTERSCOTCH/data.win"
 
 // ===[ MAIN ]===
-#define PS3_GET_TIME ((double)__builtin_ppc_get_timebase()/(double)sysGetTimebaseFrequency())
+static double freq = sysGetTimebaseFrequency(); 
+#define PS3_GET_TIME ((double)__builtin_ppc_get_timebase()/freq)
 bool shouldExit = false;
 
 int main(int argc, char* argv[]) {
@@ -291,7 +292,7 @@ int main(int argc, char* argv[]) {
         ps3glSwapBuffers();
 
         // Limit frame rate to room speed (skip in headless mode for max speed!!)
-        if (!runner->currentRoom->speed > 0) {
+        if (runner->currentRoom->speed < 0) {
             double targetFrameTime = 1.0 / (runner->currentRoom->speed);
             double nextFrameTime = lastFrameTime + targetFrameTime;
             // Sleep for most of the remaining time, then spin-wait for precision
