@@ -134,6 +134,7 @@ IniFile* Ini_parse(const char* text) {
                     currentSection->values[existingIndex] = normalizedValue;
                 } else {
                     addKeyValue(currentSection, key, normalizedValue);
+                    free(normalizedValue);
                 }
             }
             // Silently skip key=value lines outside any section (matching GML behavior)

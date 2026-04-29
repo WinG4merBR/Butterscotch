@@ -1905,11 +1905,12 @@ static RValue builtinIrandomRange(MAYBE_UNUSED VMContext* ctx, RValue* args, int
 static RValue builtinChoose(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeUndefined();
     int32_t idx = rand() % argCount;
-    // Must duplicate the value since args will be freed
+    // Steal ownership: the caller's RValue_free of args[idx] becomes a no-op, and the returned value owns the ref instead.
     RValue val = args[idx];
-    if (val.type == RVALUE_STRING && val.string != nullptr) {
+    if (val.type == RVALUE_STRING && val.string != nullptr && !val.ownsReference) {
         return RValue_makeOwnedString(safeStrdup(val.string));
     }
+    args[idx].ownsReference = false;
     return val;
 }
 
@@ -2157,6 +2158,8 @@ static RValue builtinVariableGlobalGet(VMContext* ctx, RValue* args, int32_t arg
         if (val.type == RVALUE_STRING && val.ownsReference && val.string != nullptr) {
             return RValue_makeOwnedString(safeStrdup(val.string));
         }
+        // Return a weak view: the global slot retains ownership. The caller's Pop will incRef into the destination slot.
+        val.ownsReference = false;
         return val;
     }
     return RValue_makeUndefined();
@@ -2170,13 +2173,7 @@ static RValue builtinVariableGlobalSet(VMContext* ctx, RValue* args, int32_t arg
     int32_t varID = ctx->globalVarNameMap[idx].value;
     if (ctx->globalVarCount > (uint32_t) varID) {
         RValue_free(&ctx->globalVars[varID]);
-        RValue val = args[1];
-        // Duplicate owned strings since args will be freed
-        if (val.type == RVALUE_STRING && val.string != nullptr) {
-            ctx->globalVars[varID] = RValue_makeOwnedString(safeStrdup(val.string));
-        } else {
-            ctx->globalVars[varID] = val;
-        }
+        ctx->globalVars[varID] = RValue_makeIndependent(args[1]);
     }
     return RValue_makeUndefined();
 }
@@ -2451,12 +2448,7 @@ static RValue builtinDsMapAdd(VMContext* ctx, RValue* args, int32_t argCount) {
     if (exists) {
         free(key); // Key already exists, we didn't insert it
     } else {
-        RValue val = args[2];
-        if (val.type == RVALUE_STRING && val.string != nullptr) {
-            val = RValue_makeOwnedString(safeStrdup(val.string));
-        }
-        shput(*mapPtr, key, val);
-        // The RValue is now "owned" by the map, we do not need to free it!
+        shput(*mapPtr, key, RValue_makeIndependent(args[2]));
     }
 
     return RValue_makeUndefined();
@@ -2478,12 +2470,7 @@ static RValue builtinDsMapSet(VMContext* ctx, RValue* args, int32_t argCount) {
         RValue_free(&(*mapPtr)[existingKeyIndex].value);
     }
 
-    RValue val = args[2];
-    if (val.type == RVALUE_STRING && val.string != nullptr) {
-        val = RValue_makeOwnedString(safeStrdup(val.string));
-    }
-
-    shput(*mapPtr, key, val);
+    shput(*mapPtr, key, RValue_makeIndependent(args[2]));
 
     if (existingKeyIndex != -1) {
         // If it already existed, then shput still owns the old key
@@ -2513,6 +2500,8 @@ static RValue builtinDsMapFindValue(VMContext* ctx, RValue* args, int32_t argCou
     if (val.type == RVALUE_STRING && val.string != nullptr) {
         return RValue_makeOwnedString(safeStrdup(val.string));
     }
+    // Return a weak view: the map retains ownership. The caller's Pop will incRef into the destination slot.
+    val.ownsReference = false;
     return val;
 }
 
@@ -2588,11 +2577,7 @@ static RValue builtinDsListAdd(VMContext* ctx, RValue* args, int32_t argCount) {
     if (list == nullptr) return RValue_makeUndefined();
     // ds_list_add can take multiple values after the list id
     repeat(argCount - 1, i) {
-        RValue val = args[i + 1];
-        if (val.type == RVALUE_STRING) {
-            val = RValue_makeOwnedString(safeStrdup(val.string));
-        }
-        arrput(list->items, val);
+        arrput(list->items, RValue_makeIndependent(args[i + 1]));
     }
     return RValue_makeUndefined();
 }
