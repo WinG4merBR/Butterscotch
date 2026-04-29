@@ -312,10 +312,10 @@ jobs:
           echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "date=$(git log -1 --format=%cd --date=short)" >> $GITHUB_OUTPUT
 
-      - name: Install MinGW and dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake make
+          apt update
+          apt install -y cmake make
 
       - name: Configure
         run: cmake -B build -DPLATFORM=ps3 -DCMAKE_TOOLCHAIN_FILE=ppu.cmake -DCMAKE_BUILD_TYPE=Release -DBUTTERSCOTCH_COMMIT_HASH=${{ steps.commit-info.outputs.hash }}" "-DBUTTERSCOTCH_COMMIT_DATE=${{ steps.commit-info.outputs.date }}"
