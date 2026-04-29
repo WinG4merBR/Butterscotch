@@ -1450,11 +1450,8 @@ static void handlePopz(VMContext* ctx) {
     RValue_free(&val);
 }
 
-static void handleAdd(VMContext* ctx, uint32_t instr) {
-    uint8_t resultType = instrType2(instr);
-    RValue b = stackPop(ctx);
-    RValue a = stackPop(ctx);
-
+__attribute__((noinline))
+static void handleAddString(VMContext* ctx, RValue a, RValue b, uint8_t resultType) {
     if (a.type == RVALUE_STRING && b.type == RVALUE_STRING) {
         // String concatenation
         const char* sa = a.string != nullptr ? a.string : "";
@@ -1467,7 +1464,7 @@ static void handleAdd(VMContext* ctx, uint32_t instr) {
         RValue_free(&a);
         RValue_free(&b);
         stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
-    } else if (a.type == RVALUE_STRING || b.type == RVALUE_STRING) {
+    } else {
         // String + Number: convert both to strings and concatenate (GMS behavior)
         char* sa = RValue_toString(a);
         char* sb = RValue_toString(b);
@@ -1481,73 +1478,28 @@ static void handleAdd(VMContext* ctx, uint32_t instr) {
         RValue_free(&a);
         RValue_free(&b);
         stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
-    } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPushTyped(ctx, RValue_makeInt32(a.int32 + b.int32), resultType);
-#ifndef NO_RVALUE_INT64
-    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPushTyped(ctx, RValue_makeInt64(a.int64 + b.int64), resultType);
-#endif
-    } else {
-        GMLReal result = RValue_toReal(a) + RValue_toReal(b);
-        RValue_free(&a);
-        RValue_free(&b);
-        stackPushTyped(ctx, RValue_makeReal(result), resultType);
     }
 }
 
-static void handleSub(VMContext* ctx, uint32_t instr) {
-    uint8_t resultType = instrType2(instr);
-    RValue b = stackPop(ctx);
-    RValue a = stackPop(ctx);
-    if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPushTyped(ctx, RValue_makeInt32(a.int32 - b.int32), resultType);
-#ifndef NO_RVALUE_INT64
-    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPushTyped(ctx, RValue_makeInt64(a.int64 - b.int64), resultType);
-#endif
-    } else {
-        GMLReal result = RValue_toReal(a) - RValue_toReal(b);
+__attribute__((noinline))
+static void handleMulString(VMContext* ctx, RValue a, RValue b, uint8_t resultType) {
+    // a.type == RVALUE_STRING; b is the repetition count.
+    int count = RValue_toInt32(b);
+    const char* str = a.string != nullptr ? a.string : "";
+    size_t len = strlen(str);
+    if (0 >= count || len == 0) {
         RValue_free(&a);
         RValue_free(&b);
-        stackPushTyped(ctx, RValue_makeReal(result), resultType);
-    }
-}
-
-static void handleMul(VMContext* ctx, uint32_t instr) {
-    uint8_t resultType = instrType2(instr);
-    RValue b = stackPop(ctx);
-    RValue a = stackPop(ctx);
-
-    if (a.type == RVALUE_STRING) {
-        // String * Number = string repetition
-        int count = RValue_toInt32(b);
-        const char* str = a.string != nullptr ? a.string : "";
-        size_t len = strlen(str);
-        if (count <= 0 || len == 0) {
-            RValue_free(&a);
-            RValue_free(&b);
-            stackPushTyped(ctx, RValue_makeOwnedString(safeStrdup("")), resultType);
-        } else {
-            char* result = safeMalloc(len * count + 1);
-            repeat(count, i) {
-                memcpy(result + i * len, str, len);
-            }
-            result[len * count] = '\0';
-            RValue_free(&a);
-            RValue_free(&b);
-            stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
+        stackPushTyped(ctx, RValue_makeOwnedString(safeStrdup("")), resultType);
+    } else {
+        char* result = safeMalloc(len * count + 1);
+        repeat(count, i) {
+            memcpy(result + i * len, str, len);
         }
-    } else if (a.type == RVALUE_INT32 && b.type == RVALUE_INT32) {
-        stackPushTyped(ctx, RValue_makeInt32(a.int32 * b.int32), resultType);
-#ifndef NO_RVALUE_INT64
-    } else if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
-        stackPushTyped(ctx, RValue_makeInt64(a.int64 * b.int64), resultType);
-#endif
-    } else {
-        GMLReal result = RValue_toReal(a) * RValue_toReal(b);
+        result[len * count] = '\0';
         RValue_free(&a);
         RValue_free(&b);
-        stackPushTyped(ctx, RValue_makeReal(result), resultType);
+        stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
     }
 }
 
@@ -2846,9 +2798,122 @@ static RValue executeLoop(VMContext* ctx) {
                 break;
 
             // Arithmetic
-            case OP_ADD: handleAdd(ctx, instr); break;
-            case OP_SUB: handleSub(ctx, instr); break;
-            case OP_MUL: handleMul(ctx, instr); break;
+            // We keep the number + number operations inlined in executeLoop, keeping only the slow path for string concat/repetition
+            case OP_ADD: {
+                RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
+                RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
+                uint8_t aType = slotA->type;
+                uint8_t bType = slotB->type;
+                if ((aType == RVALUE_INT32 || aType == RVALUE_REAL) && (bType == RVALUE_INT32 || bType == RVALUE_REAL)) {
+                    if (aType == RVALUE_INT32 && bType == RVALUE_INT32) {
+                        slotA->int32 = slotA->int32 + slotB->int32;
+                    } else {
+                        // Read both operands as locals before writing back, since the union means
+                        // slotA->real and slotA->int32 share storage.
+                        GMLReal aVal = (aType == RVALUE_INT32) ? (GMLReal) slotA->int32 : slotA->real;
+                        GMLReal bVal = (bType == RVALUE_INT32) ? (GMLReal) slotB->int32 : slotB->real;
+                        slotA->real = aVal + bVal;
+                        slotA->type = RVALUE_REAL;
+                    }
+#if IS_BC17_OR_HIGHER_ENABLED
+                    if (IS_BC17_OR_HIGHER(ctx)) slotA->gmlStackType = instrType2(instr);
+#endif
+                    ctx->stack.top--;
+                } else {
+                    uint8_t resultType = instrType2(instr);
+                    RValue b = stackPop(ctx);
+                    RValue a = stackPop(ctx);
+                    if (a.type == RVALUE_STRING || b.type == RVALUE_STRING) {
+                        handleAddString(ctx, a, b, resultType);
+                        break;
+                    }
+#ifndef NO_RVALUE_INT64
+                    if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+                        stackPushTyped(ctx, RValue_makeInt64(a.int64 + b.int64), resultType);
+                        break;
+                    }
+#endif
+                    GMLReal result = RValue_toReal(a) + RValue_toReal(b);
+                    RValue_free(&a);
+                    RValue_free(&b);
+                    stackPushTyped(ctx, RValue_makeReal(result), resultType);
+                }
+                break;
+            }
+            case OP_SUB: {
+                RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
+                RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
+                uint8_t aType = slotA->type;
+                uint8_t bType = slotB->type;
+                if ((aType == RVALUE_INT32 || aType == RVALUE_REAL) && (bType == RVALUE_INT32 || bType == RVALUE_REAL)) {
+                    if (aType == RVALUE_INT32 && bType == RVALUE_INT32) {
+                        slotA->int32 = slotA->int32 - slotB->int32;
+                    } else {
+                        GMLReal aVal = (aType == RVALUE_INT32) ? (GMLReal) slotA->int32 : slotA->real;
+                        GMLReal bVal = (bType == RVALUE_INT32) ? (GMLReal) slotB->int32 : slotB->real;
+                        slotA->real = aVal - bVal;
+                        slotA->type = RVALUE_REAL;
+                    }
+#if IS_BC17_OR_HIGHER_ENABLED
+                    if (IS_BC17_OR_HIGHER(ctx)) slotA->gmlStackType = instrType2(instr);
+#endif
+                    ctx->stack.top--;
+                } else {
+                    uint8_t resultType = instrType2(instr);
+                    RValue b = stackPop(ctx);
+                    RValue a = stackPop(ctx);
+#ifndef NO_RVALUE_INT64
+                    if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+                        stackPushTyped(ctx, RValue_makeInt64(a.int64 - b.int64), resultType);
+                        break;
+                    }
+#endif
+                    GMLReal result = RValue_toReal(a) - RValue_toReal(b);
+                    RValue_free(&a);
+                    RValue_free(&b);
+                    stackPushTyped(ctx, RValue_makeReal(result), resultType);
+                }
+                break;
+            }
+            case OP_MUL: {
+                RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
+                RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
+                uint8_t aType = slotA->type;
+                uint8_t bType = slotB->type;
+                if ((aType == RVALUE_INT32 || aType == RVALUE_REAL) && (bType == RVALUE_INT32 || bType == RVALUE_REAL)) {
+                    if (aType == RVALUE_INT32 && bType == RVALUE_INT32) {
+                        slotA->int32 = slotA->int32 * slotB->int32;
+                    } else {
+                        GMLReal aVal = (aType == RVALUE_INT32) ? (GMLReal) slotA->int32 : slotA->real;
+                        GMLReal bVal = (bType == RVALUE_INT32) ? (GMLReal) slotB->int32 : slotB->real;
+                        slotA->real = aVal * bVal;
+                        slotA->type = RVALUE_REAL;
+                    }
+#if IS_BC17_OR_HIGHER_ENABLED
+                    if (IS_BC17_OR_HIGHER(ctx)) slotA->gmlStackType = instrType2(instr);
+#endif
+                    ctx->stack.top--;
+                } else {
+                    uint8_t resultType = instrType2(instr);
+                    RValue b = stackPop(ctx);
+                    RValue a = stackPop(ctx);
+                    if (a.type == RVALUE_STRING) {
+                        handleMulString(ctx, a, b, resultType);
+                        break;
+                    }
+#ifndef NO_RVALUE_INT64
+                    if (a.type == RVALUE_INT64 && b.type == RVALUE_INT64) {
+                        stackPushTyped(ctx, RValue_makeInt64(a.int64 * b.int64), resultType);
+                        break;
+                    }
+#endif
+                    GMLReal result = RValue_toReal(a) * RValue_toReal(b);
+                    RValue_free(&a);
+                    RValue_free(&b);
+                    stackPushTyped(ctx, RValue_makeReal(result), resultType);
+                }
+                break;
+            }
             case OP_DIV: handleDiv(ctx, instr); break;
             case OP_REM: handleRem(ctx, instr); break;
             case OP_MOD: handleMod(ctx, instr); break;
