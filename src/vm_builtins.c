@@ -695,7 +695,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
             QueryPerformanceCounter(&counter);
             GMLReal ms = (GMLReal) counter.QuadPart / (GMLReal) freq.QuadPart * 1000.0;
             #elif defined(PLATFORM_PS3)
-                return ((double)__builtin_ppc_get_timebase()/(double)sysGetTimebaseFrequency());
+            GMLReal ms = ((double)__builtin_ppc_get_timebase()/(double)sysGetTimebaseFrequency()) * 1000.0;
             #else
             struct timespec ts;
             clock_gettime(CLOCK_MONOTONIC, &ts);
