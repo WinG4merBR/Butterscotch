@@ -313,9 +313,6 @@ int main(int argc, char* argv[]) {
     runner->audioSystem = nullptr;
     renderer->vtable->destroy(renderer);
 
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
     Runner_free(runner);
     GlfwFileSystem_destroy(glfwFileSystem);
     VM_free(vm);
