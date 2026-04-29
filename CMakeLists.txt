@@ -178,7 +178,7 @@ elseif(PLATFORM STREQUAL "ps3")
     # Platform identifier for PS3-specific code paths
     add_compile_definitions(PLATFORM_PS3)
     set(CMAKE_EXE_LINKER_FLAGS "-mhard-float -fmodulo-sched -Wl,--gc-sections -L$ENV{PS3DEV}/ppu/lib -L$ENV{PS3DEV}/portlibs/ppu/lib")
-    target_link_libraries(butterscotch m gcm_sys rsx sysutil io audio rt lv2 io audio)
+    target_link_libraries(butterscotch m gcm_sys rsx sysutil io audio rt lv2 io audio bz2)
 
 elseif(PLATFORM STREQUAL "ps2")
     # The PS2 EE has a single-precision FPU only, so double is software-emulated
