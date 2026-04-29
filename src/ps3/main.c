@@ -99,6 +99,7 @@ int main(int argc, char* argv[]) {
 
 
     // Init GLFW
+    ps3glInit();
     ioPadInit(7);
 
     // Initialize the renderer
