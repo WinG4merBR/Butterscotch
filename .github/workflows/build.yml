@@ -306,13 +306,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          apt update
-          apt install -y make ninja-build
-
       - name: Configure
-        run: cmake -B build -DPLATFORM=ps3 -DCMAKE_TOOLCHAIN_FILE=ppu.cmake -DCMAKE_BUILD_TYPE=Release -G Ninja
+        run: cmake -B build -DPLATFORM=ps3 -DCMAKE_TOOLCHAIN_FILE=ppu.cmake -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: |
