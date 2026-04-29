@@ -51,11 +51,12 @@ static bool prevState[sizeof(PAD_MAPPINGS) / sizeof(PAD_MAPPINGS[0])] = {0};
 #define DATAWIN_PATH "/dev_hdd0/BUTTERSCOTCH/data.win"
 
 // ===[ MAIN ]===
-static double freq = sysGetTimebaseFrequency(); 
+static double freq = 0; 
 #define PS3_GET_TIME ((double)__builtin_ppc_get_timebase()/freq)
 bool shouldExit = false;
 
 int main(int argc, char* argv[]) {
+    freq = sysGetTimebaseFrequency();
     printf("Loading %s...\n", DATAWIN_PATH);
 
     DataWin* dataWin = DataWin_parse(
