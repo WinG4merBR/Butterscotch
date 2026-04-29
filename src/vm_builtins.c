@@ -7909,37 +7909,37 @@ static RValue builtinAssetGetIndex(VMContext* ctx, RValue* args, int32_t argCoun
     return RValue_makeReal(-1);
 }
 
-static RValue builtin_Gpu_Set_BlendMode(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetBlendMode(VMContext* ctx, RValue* args, int32_t argCount) {
     int mode = RValue_toReal(args[0]);
     ctx->runner->renderer->vtable->gpuSetBlendMode(ctx->runner->renderer, mode);
     return RValue_makeUndefined();
 }
 
-static RValue builtin_Gpu_Set_BlendModeExt(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetBlendModeExt(VMContext* ctx, RValue* args, int32_t argCount) {
     int sfactor = RValue_toReal(args[0]);
     int dfactor = RValue_toReal(args[1]);
     ctx->runner->renderer->vtable->gpuSetBlendModeExt(ctx->runner->renderer, sfactor, dfactor);
     return RValue_makeUndefined();
 }
 
-static RValue builtin_Gpu_Set_BlendEnable(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetBlendEnable(VMContext* ctx, RValue* args, int32_t argCount) {
     bool enable = RValue_toBool(args[0]);
     ctx->runner->renderer->vtable->gpuSetBlendEnable(ctx->runner->renderer, enable);
     return RValue_makeUndefined();
 }
 
-static RValue builtin_Gpu_Set_AlphaTestEnable(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetAlphaTestEnable(VMContext* ctx, RValue* args, int32_t argCount) {
     bool enable = RValue_toBool(args[0]);
     ctx->runner->renderer->vtable->gpuSetAlphaTestEnable(ctx->runner->renderer, enable);
     return RValue_makeUndefined();
 }
 
-static RValue builtin_Gpu_Set_AlphaTestRef(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetAlphaTestRef(VMContext* ctx, RValue* args, int32_t argCount) {
     ctx->runner->renderer->vtable->gpuSetAlphaTestRef(ctx->runner->renderer, RValue_toInt32(args[0]));
     return RValue_makeUndefined();
 }
 
-static RValue builtin_Gpu_Set_ColorWriteEnable(VMContext* ctx, RValue* args, int32_t argCount) {
+static RValue builtinGpuSetColorWriteEnable(VMContext* ctx, RValue* args, int32_t argCount) {
     ctx->runner->renderer->vtable->gpuSetColorWriteEnable(
         ctx->runner->renderer, 
         RValue_toBool(args[0]), 
@@ -8480,11 +8480,11 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "font_add_sprite_ext", builtinFontAddSpriteExt);
     VM_registerBuiltin(ctx, "object_get_sprite", builtinObjectGetSprite);
     VM_registerBuiltin(ctx, "asset_get_index", builtinAssetGetIndex);
-    VM_registerBuiltin(ctx,"gpu_set_blendmode", builtin_Gpu_Set_BlendMode);
-    VM_registerBuiltin(ctx,"gpu_set_blendmode_ext", builtin_Gpu_Set_BlendModeExt);
-    VM_registerBuiltin(ctx,"gpu_set_blendenable", builtin_Gpu_Set_BlendEnable);
-    VM_registerBuiltin(ctx,"gpu_set_alphatestenable", builtin_Gpu_Set_AlphaTestEnable);
-    VM_registerBuiltin(ctx,"gpu_set_alphatestref", builtin_Gpu_Set_AlphaTestRef);
-    VM_registerBuiltin(ctx,"gpu_set_colorwriteenable", builtin_Gpu_Set_ColorWriteEnable);
+    VM_registerBuiltin(ctx,"gpu_set_blendmode", builtinGpuSetBlendMode);
+    VM_registerBuiltin(ctx,"gpu_set_blendmode_ext", builtinGpuSetBlendModeExt);
+    VM_registerBuiltin(ctx,"gpu_set_blendenable", builtinGpuSetBlendEnable);
+    VM_registerBuiltin(ctx,"gpu_set_alphatestenable", builtinGpuSetAlphaTestEnable);
+    VM_registerBuiltin(ctx,"gpu_set_alphatestref", builtinGpuSetAlphaTestRef);
+    VM_registerBuiltin(ctx,"gpu_set_colorwriteenable", builtinGpuSetColorWriteEnable);
 }
 
