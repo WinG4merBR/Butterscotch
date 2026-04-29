@@ -2,7 +2,7 @@
 #include "matrix_math.h"
 #include "text_utils.h"
 
-#include <glad/glad.h>
+#include "ps3gl.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
