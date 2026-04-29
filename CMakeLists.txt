@@ -178,6 +178,10 @@ elseif(PLATFORM STREQUAL "ps3")
     # Platform identifier for PS3-specific code paths
     add_compile_definitions(PLATFORM_PS3)
 
+    SET(CMAKE_C_FLAGS "-mcpu=cell -maltivec -mhard-float -fmodulo-sched -ffunction-sections -fdata-sections -I$ENV{PS3DEV}/ppu/include -I$ENV{PS3DEV}/portlibs/ppu/include -I$ENV{PS3DEV}/ppu/include/simdmath" ${CMAKE_C_FLAGS})
+    SET(CMAKE_CXX_FLAGS "-D_GLIBCXX11_USE_C99_STDIO ${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
+    SET(CMAKE_EXE_LINKER_FLAGS "-mhard-float -fmodulo-sched -Wl,--gc-sections -L$ENV{PS3DEV}/ppu/lib -L$ENV{PS3DEV}/portlibs/ppu/lib -lm -lgcm_sys -lrsx -lsysutil -lio -laudio -lrt -llv2 -lio -laudio ${CMAKE_EXE_LINKER_FLAGS}")
+
 elseif(PLATFORM STREQUAL "ps2")
     # The PS2 EE has a single-precision FPU only, so double is software-emulated
     add_compile_definitions(USE_FLOAT_REALS)
