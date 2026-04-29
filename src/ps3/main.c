@@ -84,9 +84,7 @@ int main(int argc, char* argv[]) {
             .parseTxtr = true,
             .parseAudo = true,
             .skipLoadingPreciseMasksForNonPreciseSprites = true
-            .lazyLoadRooms = args.lazyRooms,
-            .eagerlyLoadedRooms = args.eagerRooms
-        }
+       }
     );
 
     Gen8* gen8 = &dataWin->gen8;
