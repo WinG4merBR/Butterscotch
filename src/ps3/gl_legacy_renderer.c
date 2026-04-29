@@ -3,6 +3,7 @@
 #include "text_utils.h"
 
 #include "ps3gl.h"
+#include "rsxutil.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
