@@ -296,7 +296,7 @@ int main(int argc, char* argv[]) {
             // Sleep for most of the remaining time, then spin-wait for precision
             double remaining = nextFrameTime - PS3_GET_TIME;
             if (remaining > 0.002) {
-                sysUsleep((uint32_t)((diff - 0.001) * 1000000.0));
+                sysUsleep((uint32_t)((remaining - 0.001) * 1000000.0));
             }
             while (PS3_GET_TIME < nextFrameTime) {
                 // Spin-wait for the remaining sub-millisecond
