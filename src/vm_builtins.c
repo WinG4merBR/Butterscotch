@@ -8326,6 +8326,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_sprite_pos", builtin_drawSpritePos);
     VM_registerBuiltin(ctx, "draw_rectangle", builtin_drawRectangle);
     VM_registerBuiltin(ctx, "draw_rectangle_color", builtin_drawRectangleColor);
+    VM_registerBuiltin(ctx, "draw_rectangle_colour", builtin_drawRectangleColor);
     VM_registerBuiltin(ctx, "draw_healthbar", builtin_drawHealthbar);
     VM_registerBuiltin(ctx, "draw_set_color", builtin_drawSetColor);
     VM_registerBuiltin(ctx, "draw_set_alpha", builtin_drawSetAlpha);
