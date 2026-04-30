@@ -2223,7 +2223,7 @@ static RValue builtinVariableInstanceGet(VMContext* ctx, RValue* args, int32_t a
     Runner* runner = (Runner*) ctx->runner;
 
     if (id >= 100000) {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) return variableInstanceGetOn(ctx, inst, name);
         return RValue_makeUndefined();
     }
@@ -2252,7 +2252,7 @@ static RValue builtinVariableInstanceSet(VMContext* ctx, RValue* args, int32_t a
 
     if (id >= 100000) {
         // Specific instance ID
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) variableInstanceSetOn(ctx, inst, name, val);
         return RValue_makeUndefined();
     }
@@ -2283,7 +2283,7 @@ static RValue builtinVariableInstanceExists(VMContext* ctx, RValue* args, int32_
     Runner* runner = (Runner*) ctx->runner;
 
     if (id >= 100000) {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) return RValue_makeBool(variableInstanceExistsOn(ctx, inst, name));
         return RValue_makeBool(false);
     }
@@ -2394,7 +2394,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
 #if IS_BC17_OR_HIGHER_ENABLED
     if (args[0].type == RVALUE_METHOD && args[0].method->boundInstanceId >= 0) {
         Runner* runner = (Runner*) ctx->runner;
-        Instance* bound = hmget(runner->instancesToId, args[0].method->boundInstanceId);
+        Instance* bound = hmget(runner->instancesById, args[0].method->boundInstanceId);
         if (bound != nullptr) ctx->currentInstance = bound;
     }
 #endif
@@ -4169,7 +4169,7 @@ static RValue builtinInstanceExists(VMContext* ctx, RValue* args, int32_t argCou
         Runner_popInstanceSnapshot(runner, snapBase);
     } else {
         // Instance ID: search for a specific instance
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         found = (inst != nullptr && inst->active);
     }
     return RValue_makeBool(found);
@@ -4195,7 +4195,7 @@ static RValue builtinInstanceDestroy(VMContext* ctx, RValue* args, int32_t argCo
         }
         Runner_popInstanceSnapshot(runner, snapBase);
     } else {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) Runner_destroyInstance(runner, inst);
     }
     return RValue_makeUndefined();
@@ -6622,7 +6622,7 @@ static void instanceSetLayerActiveState(Runner* runner, int32_t layerId, bool is
         RoomLayerInstancesData* layerData = layer->instancesData;
 
         repeat(layerData->instanceCount, instanceIndex) {
-            Instance* inst = hmget(runner->instancesToId, layerData->instanceIds[instanceIndex]);
+            Instance* inst = hmget(runner->instancesById, layerData->instanceIds[instanceIndex]);
             if (inst != nullptr && !inst->destroyed)
                 inst->active = isActive;
         }
@@ -7215,7 +7215,7 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
     }
 
     Instance* structInst = Instance_create(runner->nextInstanceId++, -1, 0, 0);
-    hmput(runner->instanceById, structInst->instanceId, structInst);
+    hmput(runner->instancesById, structInst->instanceId, structInst);
     structInst->structRegistryIndex = (int32_t) arrlen(runner->structInstances);
     arrput(runner->structInstances, structInst);
     // Two refs at birth: one for the registry's implicit ref (structInstances), one for the returned RValue.
