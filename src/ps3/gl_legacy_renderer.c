@@ -343,7 +343,7 @@ static void glDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, flo
     glEnd();
 }
 
-static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, uint32_t color, float alpha) {
+static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, float angleDeg, float pivotX, float pivotY, uint32_t color, float alpha) {
     GLLegacyRenderer* gl = (GLLegacyRenderer*) renderer;
     DataWin* dw = renderer->dataWin;
 
@@ -358,7 +358,6 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     int32_t texW = gl->textureWidths[pageId];
     int32_t texH = gl->textureHeights[pageId];
 
-    // Flush if texture changed or batch full
     glBindTexture(GL_TEXTURE_2D, texId);
 
     // Compute UVs for the sub-region within the atlas
@@ -367,37 +366,45 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     float u1 = (float) (tpag->sourceX + srcOffX + srcW) / (float) texW;
     float v1 = (float) (tpag->sourceY + srcOffY + srcH) / (float) texH;
 
-    // Quad corners (no origin offset, no transform - draw_sprite_part ignores sprite origin)
-    float x0 = x;
-    float y0 = y;
-    float x1 = x + (float) srcW * xscale;
-    float y1 = y + (float) srcH * yscale;
-
     // Convert BGR color to RGB floats
     float r = (float) BGR_R(color) / 255.0f;
     float g = (float) BGR_G(color) / 255.0f;
     float b = (float) BGR_B(color) / 255.0f;
 
+    // Quad corners (no origin offset - draw_sprite_part ignores sprite origin)
+    float cx0, cy0, cx1, cy1, cx2, cy2, cx3, cy3;
+    if (angleDeg == 0.0f) {
+        cx0 = x;                         cy0 = y;
+        cx1 = x + (float) srcW * xscale; cy1 = y;
+        cx2 = x + (float) srcW * xscale; cy2 = y + (float) srcH * yscale;
+        cx3 = x;                         cy3 = y + (float) srcH * yscale;
+    } else {
+        float angleRad = -angleDeg * ((float) M_PI / 180.0f);
+        float cosA = cosf(angleRad);
+        float sinA = sinf(angleRad);
+        float qx0 = x,                         qy0 = y;
+        float qx1 = x + (float) srcW * xscale, qy1 = y;
+        float qx2 = x + (float) srcW * xscale, qy2 = y + (float) srcH * yscale;
+        float qx3 = x,                         qy3 = y + (float) srcH * yscale;
+        float dx, dy;
+        dx = qx0 - pivotX; dy = qy0 - pivotY; cx0 = cosA * dx - sinA * dy + pivotX; cy0 = sinA * dx + cosA * dy + pivotY;
+        dx = qx1 - pivotX; dy = qy1 - pivotY; cx1 = cosA * dx - sinA * dy + pivotX; cy1 = sinA * dx + cosA * dy + pivotY;
+        dx = qx2 - pivotX; dy = qy2 - pivotY; cx2 = cosA * dx - sinA * dy + pivotX; cy2 = sinA * dx + cosA * dy + pivotY;
+        dx = qx3 - pivotX; dy = qy3 - pivotY; cx3 = cosA * dx - sinA * dy + pivotX; cy3 = sinA * dx + cosA * dy + pivotY;
+    }
+
     glBegin(GL_QUADS);
-        // Vertex 0: top-left
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v0);
-        glVertex2f(x0, y0);
+        glTexCoord2f(u0, v0); glVertex2f(cx0, cy0);
 
-        // Vertex 1: top-right
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v0);
-        glVertex2f(x1, y0);
+        glTexCoord2f(u1, v0); glVertex2f(cx1, cy1);
 
-        // Vertex 2: bottom-right
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v1);
-        glVertex2f(x1, y1);
+        glTexCoord2f(u1, v1); glVertex2f(cx2, cy2);
 
-        // Vertex 3: bottom-left
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v1);
-        glVertex2f(x0, y1);
+        glTexCoord2f(u0, v1); glVertex2f(cx3, cy3);
     glEnd();
 }
 
