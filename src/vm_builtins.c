@@ -2315,9 +2315,9 @@ static RValue builtinMethod(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t a
     if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
         const char* funcName = ctx->dataWin->func.functions[rawArg].name;
         if (funcName != nullptr) {
-            ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
+            ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
             if (idx >= 0) {
-                codeIndex = ctx->funcMap[idx].value;
+                codeIndex = ctx->codeIndexByName[idx].value;
             }
         }
     }
@@ -2354,9 +2354,9 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
         if (IS_BC17_OR_HIGHER(ctx) && rawArg >= 0 && ctx->dataWin->func.functionCount > (uint32_t) rawArg) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
-                ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
+                ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
                 if (idx >= 0) {
-                    codeId = ctx->funcMap[idx].value;
+                    codeId = ctx->codeIndexByName[idx].value;
                 } else {
                     // Not a user script - might be a builtin function reference
                     ptrdiff_t bidx = shgeti(ctx->builtinMap, (char*) funcName);
@@ -7204,8 +7204,8 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
         if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
-                ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
-                if (idx >= 0) codeIndex = ctx->funcMap[idx].value;
+                ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
+                if (idx >= 0) codeIndex = ctx->codeIndexByName[idx].value;
             }
         }
     }

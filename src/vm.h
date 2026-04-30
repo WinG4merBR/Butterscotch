@@ -209,7 +209,7 @@ typedef struct VMContext {
     BuiltinEntry* builtinMap;
     bool registeredBuiltinFunctions;
     // funcName -> codeIndex hash map (stb_ds)
-    struct { char* key; int32_t value; }* funcMap;
+    struct { char* key; int32_t value; }* codeIndexByName;
     // codeName -> CodeLocals* hash map (stb_ds)
     struct { char* key; CodeLocals* value; }* codeLocalsMap;
     // BC17+: A map of CODE indexes -> localVars slot lookup map

@@ -655,9 +655,9 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
         }
 
         // Then try user scripts/code entries (funcMap maps both "funcName" and "gml_Script_funcName")
-        ptrdiff_t mapIdx = shgeti(ctx->funcMap, varDef->name);
+        ptrdiff_t mapIdx = shgeti(ctx->codeIndexByName, varDef->name);
         if (mapIdx >= 0) {
-            int32_t codeIndex = ctx->funcMap[mapIdx].value;
+            int32_t codeIndex = ctx->codeIndexByName[mapIdx].value;
             return RValue_makeMethod(codeIndex, -1);
         }
         // Then try registered built-ins
@@ -3257,16 +3257,16 @@ VMContext* VM_create(DataWin* dataWin) {
     }
 
     // Build funcName -> codeIndex hash map from SCPT chunk
-    ctx->funcMap = nullptr;
+    ctx->codeIndexByName = nullptr;
     forEach(Script, s, dataWin->scpt.scripts, dataWin->scpt.count) {
         if (s->name != nullptr && s->codeId >= 0) {
             if (dataWin->code.count > (uint32_t) s->codeId) {
                 const char* codeName = dataWin->code.entries[s->codeId].name;
                 // Map the full code entry name (e.g. "gml_Script_SCR_GAMESTART")
-                shput(ctx->funcMap, (char*) codeName, s->codeId);
+                shput(ctx->codeIndexByName, (char*) codeName, s->codeId);
                 // Also map the bare script name (e.g. "SCR_GAMESTART")
                 // since the FUNC chunk references use bare names in CALL instructions
-                shput(ctx->funcMap, (char*) s->name, s->codeId);
+                shput(ctx->codeIndexByName, (char*) s->name, s->codeId);
             }
         }
     }
@@ -3274,9 +3274,9 @@ VMContext* VM_create(DataWin* dataWin) {
     // Also map code entry names directly for non-script code (object events, room creation codes, etc.)
     repeat(dataWin->code.count, i) {
         const char* codeName = dataWin->code.entries[i].name;
-        ptrdiff_t existing = shgeti(ctx->funcMap, (char*) codeName);
+        ptrdiff_t existing = shgeti(ctx->codeIndexByName, (char*) codeName);
         if (0 > existing) {
-            shput(ctx->funcMap, (char*) codeName, (int32_t) i);
+            shput(ctx->codeIndexByName, (char*) codeName, (int32_t) i);
         }
     }
 
@@ -3316,12 +3316,12 @@ VMContext* VM_create(DataWin* dataWin) {
         if (builtin != nullptr) {
             ctx->funcCallCache[i].scriptCodeIndex = -1;
         } else {
-            ptrdiff_t mapIdx = shgeti(ctx->funcMap, (char*) name);
-            ctx->funcCallCache[i].scriptCodeIndex = (mapIdx >= 0) ? ctx->funcMap[mapIdx].value : -1;
+            ptrdiff_t mapIdx = shgeti(ctx->codeIndexByName, (char*) name);
+            ctx->funcCallCache[i].scriptCodeIndex = (mapIdx >= 0) ? ctx->codeIndexByName[mapIdx].value : -1;
         }
     }
 
-    fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->funcMap));
+    fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->codeIndexByName));
 
     return ctx;
 }
@@ -3988,9 +3988,9 @@ void VM_buildCrossReferences(VMContext* ctx) {
                 uint32_t funcIdx = resolveFuncOperand(ed);
                 if (dw->func.functionCount > funcIdx) {
                     const char* funcName = dw->func.functions[funcIdx].name;
-                    ptrdiff_t codeMapIdx = shgeti(ctx->funcMap, (char*) funcName);
+                    ptrdiff_t codeMapIdx = shgeti(ctx->codeIndexByName, (char*) funcName);
                     if (codeMapIdx >= 0) {
-                        int32_t targetIdx = ctx->funcMap[codeMapIdx].value;
+                        int32_t targetIdx = ctx->codeIndexByName[codeMapIdx].value;
                         ptrdiff_t mapIdx = hmgeti(ctx->crossRefMap, targetIdx);
                         if (0 > mapIdx) {
                             int32_t* callers = nullptr;
@@ -4156,7 +4156,7 @@ void VM_free(VMContext* ctx) {
     free(ctx->globalVars);
 
     // Free hash maps
-    shfree(ctx->funcMap);
+    shfree(ctx->codeIndexByName);
     shfree(ctx->globalVarNameMap);
     shfree(ctx->selfVarNameMap);
     repeat(shlen(ctx->codeLocalsMap), i) {

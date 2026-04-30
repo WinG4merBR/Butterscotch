@@ -719,8 +719,8 @@ int main(int argc, char* argv[]) {
     }
 
     if (args.printDeclaredFunctions) {
-        repeat(hmlen(vm->funcMap), i) {
-            printf("[%d] %s\n", vm->funcMap[i].value, vm->funcMap[i].key);
+        repeat(hmlen(vm->codeIndexByName), i) {
+            printf("[%d] %s\n", vm->codeIndexByName[i].value, vm->codeIndexByName[i].key);
         }
         VM_free(vm);
         DataWin_free(dataWin);
@@ -736,9 +736,9 @@ int main(int argc, char* argv[]) {
         } else {
             for (ptrdiff_t i = 0; shlen(args.disassemble) > i; i++) {
                 const char* name = args.disassemble[i].key;
-                ptrdiff_t idx = shgeti(vm->funcMap, (char*) name);
+                ptrdiff_t idx = shgeti(vm->codeIndexByName, (char*) name);
                 if (idx >= 0) {
-                    VM_disassemble(vm, vm->funcMap[idx].value);
+                    VM_disassemble(vm, vm->codeIndexByName[idx].value);
                 } else {
                     fprintf(stderr, "Error: Script '%s' not found in funcMap\n", name);
                 }
