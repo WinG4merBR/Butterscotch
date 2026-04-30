@@ -475,22 +475,34 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
         case BUILTIN_VAR_BBOX_LEFT: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.left : inst->x);
+            if (!bbox.valid) return RValue_makeReal(inst->x);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) llrint(bbox.left));
+            return RValue_makeReal(bbox.left);
         }
         case BUILTIN_VAR_BBOX_RIGHT: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.right : inst->x);
+            if (!bbox.valid) return RValue_makeReal(inst->x);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) (llrint(bbox.right) - 1));
+            return RValue_makeReal(bbox.right);
         }
         case BUILTIN_VAR_BBOX_TOP: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.top : inst->y);
+            if (!bbox.valid) return RValue_makeReal(inst->y);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) llrint(bbox.top));
+            return RValue_makeReal(bbox.top);
         }
         case BUILTIN_VAR_BBOX_BOTTOM: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.bottom : inst->y);
+            if (!bbox.valid) return RValue_makeReal(inst->y);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) (llrint(bbox.bottom) - 1));
+            return RValue_makeReal(bbox.bottom);
         }
         case BUILTIN_VAR_VISIBLE:
             if (inst == nullptr) break;
@@ -1280,7 +1292,14 @@ static RValue builtinCeil(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t arg
 
 static RValue builtinRound(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
-    return RValue_makeReal(GMLReal_round(RValue_toReal(args[0])));
+    // GameMaker's round() uses banker's rounding (round half to even), matching llrint() under the default IEEE 754 rounding mode.
+    // C's round()/roundf() rounds half away from zero, which produces different results for x.5 values (e.g. round(2.5) is 2 in GML but 3 with round()).
+    GMLReal v = RValue_toReal(args[0]);
+#ifdef USE_FLOAT_REALS
+    return RValue_makeReal(rintf(v));
+#else
+    return RValue_makeReal(rint(v));
+#endif
 }
 
 static RValue builtinAbs(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
