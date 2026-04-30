@@ -1211,51 +1211,102 @@ static void gsDrawTiled(Renderer* renderer, int32_t tpagIndex, float originX, fl
     }
 }
 
-static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, uint32_t color, float alpha) {
+static void gsDrawTiledPart(Renderer* renderer, int32_t tpagIndex, int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH, float dstX, float dstY, float dstW, float dstH, uint32_t color, float alpha) {
+    GsRenderer* gs = (GsRenderer*) renderer;
+    DataWin* dw = renderer->dataWin;
+    if (0 > tpagIndex || (uint32_t) tpagIndex >= dw->tpag.count) return;
+
+    GSTEXTURE tex;
+    if (!setupTextureForTPAG(gs, &tex, tpagIndex)) return;
+
+    AtlasTPAGEntry* atlasEntry = &gs->atlasTPAGEntries[tpagIndex];
+    TexturePageItem* tpag = &dw->tpag.items[tpagIndex];
+
+    // Crop coords in source-page space (matching gsDrawSpritePart's coordinate system).
+    float cX = (float) atlasEntry->cropX - (float) tpag->targetX;
+    float cY = (float) atlasEntry->cropY - (float) tpag->targetY;
+    float cW = (float) atlasEntry->cropW;
+    float cH = (float) atlasEntry->cropH;
+    float ratioX = cW > 0.0f ? (float) atlasEntry->width  / cW : 1.0f;
+    float ratioY = cH > 0.0f ? (float) atlasEntry->height / cH : 1.0f;
+
+    uint8_t r, g, b;
+    if (color == 0xFFFFFFu) { r = g = b = 0x80; } else { r = BGR_R(color) >> 1; g = BGR_G(color) >> 1; b = BGR_B(color) >> 1; }
+    uint8_t a = alphaToGS(alpha);
+    u64 gsColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
+
+    float viewBaseX = -(float) gs->viewX;
+    float viewBaseY = -(float) gs->viewY;
+    float viewScaleX = gs->scaleX;
+    float viewScaleY = gs->scaleY;
+    float viewOffX = gs->offsetX;
+    float viewOffY = gs->offsetY;
+
+    int32_t tilesY = (int32_t)(dstH / (float) srcH) + 2;
+    int32_t tilesX = (int32_t)(dstW / (float) srcW) + 2;
+
+    repeat(tilesY, iy) {
+        float rowDstY = dstY + (float) iy * (float) srcH;
+        if (rowDstY >= dstY + dstH) break;
+        int32_t rowSrcH = srcH < (int32_t)((dstY + dstH) - rowDstY) ? srcH : (int32_t)((dstY + dstH) - rowDstY);
+
+        float intY1 = cY > (float) srcY ? cY : (float) srcY;
+        float intY2 = (cY + cH) < (float)(srcY + rowSrcH) ? (cY + cH) : (float)(srcY + rowSrcH);
+        if (intY1 >= intY2) continue;
+        float clipOffY = intY1 - (float) srcY;
+        float visH = intY2 - intY1;
+        float v0 = (float) atlasEntry->atlasY + (intY1 - cY) * ratioY;
+        float v1 = v0 + visH * ratioY;
+
+        float sy0 = (rowDstY + clipOffY + viewBaseY) * viewScaleY + viewOffY;
+        float sy1 = sy0 + visH * viewScaleY;
+        float minSY = sy0 < sy1 ? sy0 : sy1;
+        float maxSY = sy0 > sy1 ? sy0 : sy1;
+        if (0.0f > maxSY || minSY > PS2_SCREEN_HEIGHT) continue;
+
+        repeat(tilesX, ix) {
+            float colDstX = dstX + (float) ix * (float) srcW;
+            if (colDstX >= dstX + dstW) break;
+            int32_t colSrcW = srcW < (int32_t)((dstX + dstW) - colDstX) ? srcW : (int32_t)((dstX + dstW) - colDstX);
+
+            float intX1 = cX > (float) srcX ? cX : (float) srcX;
+            float intX2 = (cX + cW) < (float)(srcX + colSrcW) ? (cX + cW) : (float)(srcX + colSrcW);
+            if (intX1 >= intX2) continue;
+            float clipOffX = intX1 - (float) srcX;
+            float visW = intX2 - intX1;
+            float u0 = (float) atlasEntry->atlasX + (intX1 - cX) * ratioX;
+            float u1 = u0 + visW * ratioX;
+
+            float sx0 = (colDstX + clipOffX + viewBaseX) * viewScaleX + viewOffX;
+            float sx1 = sx0 + visW * viewScaleX;
+            float minSX = sx0 < sx1 ? sx0 : sx1;
+            float maxSX = sx0 > sx1 ? sx0 : sx1;
+            if (0.0f > maxSX || minSX > PS2_SCREEN_WIDTH) continue;
+
+            gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx0, sy0, u0, v0, sx1, sy1, u1, v1, 0, gsColor);
+        }
+    }
+}
+
+static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcOffX, int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, float angleDeg, float pivotX, float pivotY, uint32_t color, float alpha) {
     GsRenderer* gs = (GsRenderer*) renderer;
 
     if (0 > tpagIndex || (uint32_t) tpagIndex >= renderer->dataWin->tpag.count) return;
 
-    // Compute screen position
-    float gameX1 = x - (float) gs->viewX;
-    float gameY1 = y - (float) gs->viewY;
-    float gameX2 = gameX1 + (float) srcW * xscale;
-    float gameY2 = gameY1 + (float) srcH * yscale;
-
-    float sx1 = gameX1 * gs->scaleX + gs->offsetX;
-    float sy1 = gameY1 * gs->scaleY + gs->offsetY;
-    float sx2 = gameX2 * gs->scaleX + gs->offsetX;
-    float sy2 = gameY2 * gs->scaleY + gs->offsetY;
-
-    // View frustum culling: skip if entirely off-screen (handles negative scales via min/max)
-    float minSX = (sx1 < sx2) ? sx1 : sx2;
-    float maxSX = (sx1 > sx2) ? sx1 : sx2;
-    float minSY = (sy1 < sy2) ? sy1 : sy2;
-    float maxSY = (sy1 > sy2) ? sy1 : sy2;
-    if (maxSX < 0.0f || minSX > PS2_SCREEN_WIDTH || maxSY < 0.0f || minSY > PS2_SCREEN_HEIGHT) return;
-
     // Set up GSTEXTURE for this TPAG entry
     GSTEXTURE tex;
-    if (!setupTextureForTPAG(gs, &tex, tpagIndex)) {
-        // Fallback: draw colored rectangle
-        uint8_t r = BGR_R(color);
-        uint8_t g = BGR_G(color);
-        uint8_t b = BGR_B(color);
-        uint8_t a = alphaToGS(alpha);
-        gsKit_prim_sprite(gs->gsGlobal, sx1, sy1, sx2, sy2, 0, GS_SETREG_RGBAQ(r, g, b, a, 0x00));
-        return;
-    }
+    bool hasTexture = setupTextureForTPAG(gs, &tex, tpagIndex);
 
-    AtlasTPAGEntry* atlasEntry = &gs->atlasTPAGEntries[tpagIndex];
+    AtlasTPAGEntry* atlasEntry = hasTexture ? &gs->atlasTPAGEntries[tpagIndex] : nullptr;
     TexturePageItem* tpag = &renderer->dataWin->tpag.items[tpagIndex];
 
     // srcOffX/srcOffY are in source-page space (Renderer_drawSpritePartExt subtracts tpag->targetX/Y to convert from GML sprite-bounding space).
     // The preprocessor's cropX/cropY, however, are in sprite-bounding space (extractFromTPAG builds a boundingWidth x boundingHeight image with pixels offset by targetX/targetY, then cropTransparentBorders runs on that).
     // Subtract targetX/targetY here so both sides of the intersection live in the same coordinate system.
-    float cX = (float) atlasEntry->cropX - (float) tpag->targetX;
-    float cY = (float) atlasEntry->cropY - (float) tpag->targetY;
-    float cW = (float) atlasEntry->cropW;
-    float cH = (float) atlasEntry->cropH;
+    float cX = hasTexture ? ((float) atlasEntry->cropX - (float) tpag->targetX) : 0.0f;
+    float cY = hasTexture ? ((float) atlasEntry->cropY - (float) tpag->targetY) : 0.0f;
+    float cW = hasTexture ? (float) atlasEntry->cropW : (float) tpag->sourceWidth;
+    float cH = hasTexture ? (float) atlasEntry->cropH : (float) tpag->sourceHeight;
 
     float intX1 = fmaxf((float) srcOffX, cX);
     float intY1 = fmaxf((float) srcOffY, cY);
@@ -1264,25 +1315,76 @@ static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
 
     if (intX1 >= intX2 || intY1 >= intY2) return;
 
-    // Adjust screen position if the crop clipped the start of the requested rect
+    // Compute clip offset and visible region dimensions
     float clipOffX = intX1 - (float) srcOffX;
     float clipOffY = intY1 - (float) srcOffY;
     float visW = intX2 - intX1;
     float visH = intY2 - intY1;
 
-    sx1 = (x + clipOffX * xscale - (float) gs->viewX) * gs->scaleX + gs->offsetX;
-    sy1 = (y + clipOffY * yscale - (float) gs->viewY) * gs->scaleY + gs->offsetY;
-    sx2 = (x + (clipOffX + visW) * xscale - (float) gs->viewX) * gs->scaleX + gs->offsetX;
-    sy2 = (y + (clipOffY + visH) * yscale - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+    // World-space corners of the visible sub-rect (before rotation)
+    float gx0 = x + clipOffX * xscale;
+    float gy0 = y + clipOffY * yscale;
+    float gx1 = gx0 + visW * xscale;
+    float gy1 = gy0;
+    float gx2 = gx0;
+    float gy2 = gy0 + visH * yscale;
+    float gx3 = gx1;
+    float gy3 = gy2;
+
+    if (angleDeg != 0.0f) {
+        float angleRad = -angleDeg * ((float) M_PI / 180.0f);
+        float cosA = cosf(angleRad);
+        float sinA = sinf(angleRad);
+        float dx, dy, rx, ry;
+#define ROTATE_CORNER(gxi, gyi) do { dx = (gxi) - pivotX; dy = (gyi) - pivotY; rx = cosA * dx - sinA * dy + pivotX; ry = sinA * dx + cosA * dy + pivotY; (gxi) = rx; (gyi) = ry; } while(0)
+        ROTATE_CORNER(gx0, gy0);
+        ROTATE_CORNER(gx1, gy1);
+        ROTATE_CORNER(gx2, gy2);
+        ROTATE_CORNER(gx3, gy3);
+#undef ROTATE_CORNER
+    }
+
+    // Convert game-space corners to screen space
+    float sx0 = (gx0 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy0 = (gy0 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+    float sx1 = (gx1 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy1 = (gy1 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+    float sx2 = (gx2 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy2 = (gy2 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+    float sx3 = (gx3 - (float) gs->viewX) * gs->scaleX + gs->offsetX;
+    float sy3 = (gy3 - (float) gs->viewY) * gs->scaleY + gs->offsetY;
+
+    // View frustum culling
+    float minSX = fminf(fminf(sx0, sx1), fminf(sx2, sx3));
+    float maxSX = fmaxf(fmaxf(sx0, sx1), fmaxf(sx2, sx3));
+    float minSY = fminf(fminf(sy0, sy1), fminf(sy2, sy3));
+    float maxSY = fmaxf(fmaxf(sy0, sy1), fmaxf(sy2, sy3));
+    if (maxSX < 0.0f || minSX > PS2_SCREEN_WIDTH || maxSY < 0.0f || minSY > PS2_SCREEN_HEIGHT) return;
+
+    bool hasRotation = angleDeg != 0.0f;
+
+    if (!hasTexture) {
+        uint8_t r = BGR_R(color);
+        uint8_t g = BGR_G(color);
+        uint8_t b = BGR_B(color);
+        uint8_t a = alphaToGS(alpha);
+        u64 fallbackColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
+        if (hasRotation) {
+            gsKit_prim_quad(gs->gsGlobal, sx0, sy0, sx1, sy1, sx2, sy2, sx3, sy3, 0, fallbackColor);
+        } else {
+            gsKit_prim_sprite(gs->gsGlobal, sx0, sy0, sx3, sy3, 0, fallbackColor);
+        }
+        return;
+    }
 
     // Map intersection region to atlas UV space
     float ratioX = (cW > 0) ? ((float) atlasEntry->width / cW) : 1.0f;
     float ratioY = (cH > 0) ? ((float) atlasEntry->height / cH) : 1.0f;
 
-    float u1 = (float) atlasEntry->atlasX + (intX1 - cX) * ratioX;
-    float v1 = (float) atlasEntry->atlasY + (intY1 - cY) * ratioY;
-    float u2 = u1 + visW * ratioX;
-    float v2 = v1 + visH * ratioY;
+    float u0 = (float) atlasEntry->atlasX + (intX1 - cX) * ratioX;
+    float v0 = (float) atlasEntry->atlasY + (intY1 - cY) * ratioY;
+    float u1 = u0 + visW * ratioX;
+    float v1 = v0 + visH * ratioY;
 
     // GS modulate mode: Output = Texture * Vertex / 128
     uint8_t r = BGR_R(color) >> 1;
@@ -1291,7 +1393,11 @@ static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
     uint8_t a = alphaToGS(alpha);
     u64 gsColor = GS_SETREG_RGBAQ(r, g, b, a, 0x00);
 
-    gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx1, sy1, u1, v1, sx2, sy2, u2, v2, 0, gsColor);
+    if (hasRotation) {
+        gsKit_prim_quad_texture(gs->gsGlobal, &tex, sx0, sy0, u0, v0, sx1, sy1, u1, v0, sx2, sy2, u0, v1, sx3, sy3, u1, v1, 0, gsColor);
+    } else {
+        gsKit_prim_sprite_texture(gs->gsGlobal, &tex, sx0, sy0, u0, v0, sx3, sy3, u1, v1, 0, gsColor);
+    }
 }
 
 static void gsDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, float alpha) {
@@ -1892,6 +1998,7 @@ static RendererVtable gsVtable = {
     .gpuSetColorWriteEnable = gsGpuSetColorWriteEnable,
     .drawTile = gsDrawTile,
     .drawTiled = gsDrawTiled,
+    .drawTiledPart = gsDrawTiledPart,
 };
 
 // ===[ Public API ]===

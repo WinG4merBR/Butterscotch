@@ -2228,7 +2228,7 @@ static RValue builtinVariableInstanceGet(VMContext* ctx, RValue* args, int32_t a
     Runner* runner = (Runner*) ctx->runner;
 
     if (id >= 100000) {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) return variableInstanceGetOn(ctx, inst, name);
         return RValue_makeUndefined();
     }
@@ -2257,7 +2257,7 @@ static RValue builtinVariableInstanceSet(VMContext* ctx, RValue* args, int32_t a
 
     if (id >= 100000) {
         // Specific instance ID
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) variableInstanceSetOn(ctx, inst, name, val);
         return RValue_makeUndefined();
     }
@@ -2288,7 +2288,7 @@ static RValue builtinVariableInstanceExists(VMContext* ctx, RValue* args, int32_
     Runner* runner = (Runner*) ctx->runner;
 
     if (id >= 100000) {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) return RValue_makeBool(variableInstanceExistsOn(ctx, inst, name));
         return RValue_makeBool(false);
     }
@@ -2320,9 +2320,9 @@ static RValue builtinMethod(VMContext* ctx, MAYBE_UNUSED RValue* args, int32_t a
     if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
         const char* funcName = ctx->dataWin->func.functions[rawArg].name;
         if (funcName != nullptr) {
-            ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
+            ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
             if (idx >= 0) {
-                codeIndex = ctx->funcMap[idx].value;
+                codeIndex = ctx->codeIndexByName[idx].value;
             }
         }
     }
@@ -2359,9 +2359,17 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
         if (IS_BC17_OR_HIGHER(ctx) && rawArg >= 0 && ctx->dataWin->func.functionCount > (uint32_t) rawArg) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
-                ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
+                ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
                 if (idx >= 0) {
-                    codeId = ctx->funcMap[idx].value;
+                    codeId = ctx->codeIndexByName[idx].value;
+                } else {
+                    // Not a user script - might be a builtin function reference
+                    ptrdiff_t bidx = shgeti(ctx->builtinMap, (char*) funcName);
+                    if (bidx >= 0) {
+                        BuiltinFunc bf = ctx->builtinMap[bidx].value;
+                        RValue* scriptArgs = (argCount > 1) ? &args[1] : nullptr;
+                        return bf(ctx, scriptArgs, argCount - 1);
+                    }
                 }
             }
         }
@@ -2391,7 +2399,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
 #if IS_BC17_OR_HIGHER_ENABLED
     if (args[0].type == RVALUE_METHOD && args[0].method->boundInstanceId >= 0) {
         Runner* runner = (Runner*) ctx->runner;
-        Instance* bound = hmget(runner->instancesToId, args[0].method->boundInstanceId);
+        Instance* bound = hmget(runner->instancesById, args[0].method->boundInstanceId);
         if (bound != nullptr) ctx->currentInstance = bound;
     }
 #endif
@@ -4166,7 +4174,7 @@ static RValue builtinInstanceExists(VMContext* ctx, RValue* args, int32_t argCou
         Runner_popInstanceSnapshot(runner, snapBase);
     } else {
         // Instance ID: search for a specific instance
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         found = (inst != nullptr && inst->active);
     }
     return RValue_makeBool(found);
@@ -4192,7 +4200,7 @@ static RValue builtinInstanceDestroy(VMContext* ctx, RValue* args, int32_t argCo
         }
         Runner_popInstanceSnapshot(runner, snapBase);
     } else {
-        Instance* inst = hmget(runner->instancesToId, id);
+        Instance* inst = hmget(runner->instancesById, id);
         if (inst != nullptr && inst->active) Runner_destroyInstance(runner, inst);
     }
     return RValue_makeUndefined();
@@ -5132,7 +5140,7 @@ static RValue builtin_drawSpritePartExt(VMContext* ctx, RValue* args, MAYBE_UNUS
         subimg = (int32_t) ((Instance*) ctx->currentInstance)->imageIndex;
     }
 
-    Renderer_drawSpritePartExt(runner->renderer, spriteIndex, subimg, left, top, width, height, x, y, xscale, yscale, color, alpha);
+    Renderer_drawSpritePartExt(runner->renderer, spriteIndex, subimg, left, top, width, height, x, y, xscale, yscale, 0.0f, 0.0f, 0.0f, color, alpha);
     return RValue_makeUndefined();
 }
 
@@ -5160,7 +5168,6 @@ static RValue builtin_drawSpritePos(VMContext* ctx, RValue* args, MAYBE_UNUSED i
 
     return RValue_makeUndefined();
 }
-
 
 static RValue builtin_drawRectangle(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
@@ -5502,7 +5509,7 @@ static RValue builtin_drawBackgroundPartExt(VMContext* ctx, RValue* args, MAYBE_
     int32_t tpagIndex = Renderer_resolveBackgroundTPAGIndex(runner->dataWin, bgIndex);
     if (0 > tpagIndex) return RValue_makeUndefined();
 
-    runner->renderer->vtable->drawSpritePart(runner->renderer, tpagIndex, left, top, width, height, x, y, xscale, yscale, color, alpha);
+    runner->renderer->vtable->drawSpritePart(runner->renderer, tpagIndex, left, top, width, height, x, y, xscale, yscale, 0.0f, 0.0f, 0.0f, color, alpha);
     return RValue_makeUndefined();
 }
 
@@ -5955,7 +5962,7 @@ static RValue builtinPlaceMeeting(VMContext* ctx, RValue* args, int32_t argCount
             for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && !found; gy++) {
                 Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
                 int32_t cellLen = (int32_t) arrlen(cell);
-                for (int32_t ci = 0; cellLen > ci; ci++) {
+                repeat(cellLen, ci) {
                     Instance* other = cell[ci];
                     if (!other->active || other == caller) continue;
                     if (other->lastCollisionQueryId == queryId) continue;
@@ -6311,7 +6318,7 @@ static RValue builtinInstancePlace(VMContext* ctx, RValue* args, int32_t argCoun
             for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
                 Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
                 int32_t cellLen = (int32_t) arrlen(cell);
-                for (int32_t ci = 0; cellLen > ci; ci++) {
+                repeat(cellLen, ci) {
                     Instance* other = cell[ci];
                     if (!other->active || other == caller) continue;
                     if (other->lastCollisionQueryId == queryId) continue;
@@ -6365,6 +6372,52 @@ static RValue builtinInstancePosition(VMContext* ctx, RValue* args, int32_t argC
     Runner_popInstanceSnapshot(runner, snapBase);
 
     return RValue_makeReal((GMLReal) resultId);
+}
+
+// position_meeting(x, y, obj) - returns true if point (x, y) is inside any instance of obj.
+static RValue builtinPositionMeeting(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeBool(false);
+
+    Runner* runner = (Runner*) ctx->runner;
+    GMLReal px = RValue_toReal(args[0]);
+    GMLReal py = RValue_toReal(args[1]);
+    int32_t target = RValue_toInt32(args[2]);
+
+    bool found = false;
+    bool filterByObject = target >= 0 && 100000 > target;
+    bool filterByInstanceId = target >= 100000;
+
+    SpatialGrid_syncGrid(runner, runner->spatialGrid);
+
+    SpatialGridRange range = SpatialGrid_computeCellRange(runner->spatialGrid, px, py, px, py);
+    uint32_t queryId = ++runner->collisionQueryCounter;
+
+    for (int32_t gx = range.minGridX; range.maxGridX >= gx && !found; gx++) {
+        for (int32_t gy = range.minGridY; range.maxGridY >= gy && !found; gy++) {
+            Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
+            int32_t cellLen = (int32_t) arrlen(cell);
+            repeat(cellLen, ci) {
+                Instance* other = cell[ci];
+                // Keep in mind that we DO NOT skip "self"
+                if (!other->active) continue;
+                if (other->lastCollisionQueryId == queryId) continue;
+                other->lastCollisionQueryId = queryId;
+
+                if (filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, target)) continue;
+                if (filterByInstanceId && other->instanceId != (uint32_t) target) continue;
+
+                InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, other);
+                if (!bbox.valid) continue;
+
+                if (bbox.left > px || px >= bbox.right || bbox.top > py || py >= bbox.bottom) continue;
+
+                found = true;
+                break;
+            }
+        }
+    }
+
+    return RValue_makeBool(found);
 }
 
 // Misc stubs
@@ -6574,7 +6627,7 @@ static void instanceSetLayerActiveState(Runner* runner, int32_t layerId, bool is
         RoomLayerInstancesData* layerData = layer->instancesData;
 
         repeat(layerData->instanceCount, instanceIndex) {
-            Instance* inst = hmget(runner->instancesToId, layerData->instanceIds[instanceIndex]);
+            Instance* inst = hmget(runner->instancesById, layerData->instanceIds[instanceIndex]);
             if (inst != nullptr && !inst->destroyed)
                 inst->active = isActive;
         }
@@ -7156,8 +7209,8 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
         if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
-                ptrdiff_t idx = shgeti(ctx->funcMap, (char*) funcName);
-                if (idx >= 0) codeIndex = ctx->funcMap[idx].value;
+                ptrdiff_t idx = shgeti(ctx->codeIndexByName, (char*) funcName);
+                if (idx >= 0) codeIndex = ctx->codeIndexByName[idx].value;
             }
         }
     }
@@ -7167,7 +7220,7 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
     }
 
     Instance* structInst = Instance_create(runner->nextInstanceId++, -1, 0, 0);
-    hmput(runner->instancesToId, structInst->instanceId, structInst);
+    hmput(runner->instancesById, structInst->instanceId, structInst);
     structInst->structRegistryIndex = (int32_t) arrlen(runner->structInstances);
     arrput(runner->structInstances, structInst);
     // Two refs at birth: one for the registry's implicit ref (structInstances), one for the returned RValue.
@@ -7930,13 +7983,22 @@ static RValue builtinGpuSetAlphaTestRef(VMContext* ctx, RValue* args, int32_t ar
 }
 
 static RValue builtinGpuSetColorWriteEnable(VMContext* ctx, RValue* args, int32_t argCount) {
-    ctx->runner->renderer->vtable->gpuSetColorWriteEnable(
-        ctx->runner->renderer, 
-        RValue_toBool(args[0]), 
-        RValue_toBool(args[1]), 
-        RValue_toBool(args[2]), 
-        RValue_toBool(args[3])
-    );
+    bool r, g, b, a;
+    if (argCount == 1 && args[0].type == RVALUE_ARRAY && args[0].array != nullptr && GMLArray_length1D(args[0].array) >= 4) {
+        GMLArray* arr = args[0].array;
+        r = RValue_toBool(*GMLArray_slot(arr, 0));
+        g = RValue_toBool(*GMLArray_slot(arr, 1));
+        b = RValue_toBool(*GMLArray_slot(arr, 2));
+        a = RValue_toBool(*GMLArray_slot(arr, 3));
+    } else if (argCount >= 4) {
+        r = RValue_toBool(args[0]);
+        g = RValue_toBool(args[1]);
+        b = RValue_toBool(args[2]);
+        a = RValue_toBool(args[3]);
+    } else {
+        return RValue_makeUndefined();
+    }
+    ctx->runner->renderer->vtable->gpuSetColorWriteEnable(ctx->runner->renderer, r, g, b, a);
     return RValue_makeUndefined();
 }
 
@@ -8363,6 +8425,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "collision_point", builtinCollisionPoint);
     VM_registerBuiltin(ctx, "instance_place", builtinInstancePlace);
     VM_registerBuiltin(ctx, "instance_position", builtinInstancePosition);
+    VM_registerBuiltin(ctx, "position_meeting", builtinPositionMeeting);
     VM_registerBuiltin(ctx, "place_free", builtinPlaceFree);
     VM_registerBuiltin(ctx, "place_empty", builtinPlaceEmpty);
 

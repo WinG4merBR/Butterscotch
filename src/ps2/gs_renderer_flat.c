@@ -140,7 +140,7 @@ static void gsDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     gsKit_prim_sprite(gs->gsGlobal, sx1, sy1, sx2, sy2, 0, quadColor);
 }
 
-static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, MAYBE_UNUSED int32_t srcOffX, MAYBE_UNUSED int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, MAYBE_UNUSED uint32_t color, float alpha) {
+static void gsDrawSpritePart(Renderer* renderer, int32_t tpagIndex, MAYBE_UNUSED int32_t srcOffX, MAYBE_UNUSED int32_t srcOffY, int32_t srcW, int32_t srcH, float x, float y, float xscale, float yscale, MAYBE_UNUSED float angleDeg, MAYBE_UNUSED float pivotX, MAYBE_UNUSED float pivotY, MAYBE_UNUSED uint32_t color, float alpha) {
     GsRendererFlat* gs = (GsRendererFlat*) renderer;
 
     if (0 > tpagIndex || (uint32_t) tpagIndex >= renderer->dataWin->tpag.count) return;

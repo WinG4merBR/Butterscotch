@@ -507,7 +507,7 @@ static Instance* findInstanceByTarget(VMContext* ctx, int32_t target) {
 
     if (target >= 100000) {
         // Instance ID - find specific instance
-        return hmget(runner->instancesToId, target);
+        return hmget(runner->instancesById, target);
     }
 
     // Object index - find first active matching instance via the descendant-inclusive bucket. Pure read, no user code, so we walk the bucket directly without an arena snapshot.
@@ -655,9 +655,9 @@ static RValue resolveVariableRead(VMContext* ctx, int32_t instanceType, uint32_t
         }
 
         // Then try user scripts/code entries (funcMap maps both "funcName" and "gml_Script_funcName")
-        ptrdiff_t mapIdx = shgeti(ctx->funcMap, varDef->name);
+        ptrdiff_t mapIdx = shgeti(ctx->codeIndexByName, varDef->name);
         if (mapIdx >= 0) {
-            int32_t codeIndex = ctx->funcMap[mapIdx].value;
+            int32_t codeIndex = ctx->codeIndexByName[mapIdx].value;
             return RValue_makeMethod(codeIndex, -1);
         }
         // Then try registered built-ins
@@ -1151,6 +1151,9 @@ static void handlePush(VMContext* ctx, uint32_t instr, const uint8_t* extraData,
             int32_t instanceType = (int32_t) instrInstanceType(instr);
             uint32_t varRef = resolveVarOperand(extraData);
             uint8_t varType = (varRef >> 24) & 0xF8;
+            // BC17: VARTYPE_INSTANCE encodes (instanceId - 100000) in the instruction's lower 16 bits.
+            // Add 100000 back so findInstanceByTarget sees the real runtime instance ID.
+            if (varType == VARTYPE_INSTANCE) instanceType += 100000;
 #if IS_BC17_OR_HIGHER_ENABLED
             if (varType == VARTYPE_ARRAYPUSHAF || varType == VARTYPE_ARRAYPOPAF) {
                 // V17: multi-dim first-step. Stack has [scope, firstIndex] (with an optional real-instance slot underneath when scope == -9 INSTANCE_STACKTOP).
@@ -1532,8 +1535,13 @@ static void handleMulString(VMContext* ctx, RValue a, RValue b, uint8_t resultTy
 static void handleDiv(VMContext* ctx, uint32_t instr) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
+    uint8_t type1 = instrType1(instr);
+    uint8_t type2 = instrType2(instr);
     GMLReal divisor = RValue_toReal(b);
-    requireMessageFormatted(divisor != 0.0, "VM: [%s] DoDiv :: Divide by zero", ctx->currentCodeName);
+    // In GameMaker's native runner, ONLY integer/integer division throws a hard error on zero, float/variable types rely on IEEE 754 (produces NaN)
+    if ((type1 == GML_TYPE_INT32 || type1 == GML_TYPE_INT64) && (type2 == GML_TYPE_INT32 || type2 == GML_TYPE_INT64)) {
+        requireMessageFormatted(divisor != 0.0, "VM: [%s] DoDiv :: Divide by zero", ctx->currentCodeName);
+    }
     GMLReal result = RValue_toReal(a) / divisor;
     RValue_free(&a);
     RValue_free(&b);
@@ -1544,7 +1552,7 @@ static void handleRem(VMContext* ctx, uint32_t instr) {
     RValue b = stackPop(ctx);
     RValue a = stackPop(ctx);
     int32_t ib = RValue_toInt32(b);
-    requireMessageFormatted(ib != 0.0, "VM: [%s] DoRem :: Divide by zero", ctx->currentCodeName);
+    requireMessageFormatted(ib != 0, "VM: [%s] DoRem :: Divide by zero", ctx->currentCodeName);
     int32_t result = RValue_toInt32(a) % ib;
     RValue_free(&a);
     RValue_free(&b);
@@ -2254,7 +2262,7 @@ static void handlePushEnv(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
 
     if (target >= 100000) {
         // Instance ID - find specific instance
-        Instance* inst = hmget(runner->instancesToId, target);
+        Instance* inst = hmget(runner->instancesById, target);
         if (inst != nullptr && inst->active) {
             switchToInstance(ctx, inst);
             return;
@@ -2811,6 +2819,8 @@ static RValue executeLoop(VMContext* ctx) {
                 uint32_t varRef = resolveVarOperand(extraData);
                 uint8_t varType = (uint8_t) ((varRef >> 24) & 0xF8);
                 int32_t instanceType = instrInstanceType(instr);
+                // BC17: VARTYPE_INSTANCE encodes (instanceId - 100000) in the instruction's lower 16 bits.
+                if (varType == VARTYPE_INSTANCE) instanceType += 100000;
                 int32_t type2 = instrType2(instr); // source type (what's on stack)
                 if (type1 == GML_TYPE_VARIABLE && varType == VARTYPE_NORMAL) {
                     // Inline fast path for the simple variable-assignment case: type1==VARIABLE, which is ~99.998% of all Pops in real workloads
@@ -3247,16 +3257,16 @@ VMContext* VM_create(DataWin* dataWin) {
     }
 
     // Build funcName -> codeIndex hash map from SCPT chunk
-    ctx->funcMap = nullptr;
+    ctx->codeIndexByName = nullptr;
     forEach(Script, s, dataWin->scpt.scripts, dataWin->scpt.count) {
         if (s->name != nullptr && s->codeId >= 0) {
             if (dataWin->code.count > (uint32_t) s->codeId) {
                 const char* codeName = dataWin->code.entries[s->codeId].name;
                 // Map the full code entry name (e.g. "gml_Script_SCR_GAMESTART")
-                shput(ctx->funcMap, (char*) codeName, s->codeId);
+                shput(ctx->codeIndexByName, (char*) codeName, s->codeId);
                 // Also map the bare script name (e.g. "SCR_GAMESTART")
                 // since the FUNC chunk references use bare names in CALL instructions
-                shput(ctx->funcMap, (char*) s->name, s->codeId);
+                shput(ctx->codeIndexByName, (char*) s->name, s->codeId);
             }
         }
     }
@@ -3264,9 +3274,9 @@ VMContext* VM_create(DataWin* dataWin) {
     // Also map code entry names directly for non-script code (object events, room creation codes, etc.)
     repeat(dataWin->code.count, i) {
         const char* codeName = dataWin->code.entries[i].name;
-        ptrdiff_t existing = shgeti(ctx->funcMap, (char*) codeName);
+        ptrdiff_t existing = shgeti(ctx->codeIndexByName, (char*) codeName);
         if (0 > existing) {
-            shput(ctx->funcMap, (char*) codeName, (int32_t) i);
+            shput(ctx->codeIndexByName, (char*) codeName, (int32_t) i);
         }
     }
 
@@ -3306,12 +3316,12 @@ VMContext* VM_create(DataWin* dataWin) {
         if (builtin != nullptr) {
             ctx->funcCallCache[i].scriptCodeIndex = -1;
         } else {
-            ptrdiff_t mapIdx = shgeti(ctx->funcMap, (char*) name);
-            ctx->funcCallCache[i].scriptCodeIndex = (mapIdx >= 0) ? ctx->funcMap[mapIdx].value : -1;
+            ptrdiff_t mapIdx = shgeti(ctx->codeIndexByName, (char*) name);
+            ctx->funcCallCache[i].scriptCodeIndex = (mapIdx >= 0) ? ctx->codeIndexByName[mapIdx].value : -1;
         }
     }
 
-    fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->funcMap));
+    fprintf(stderr, "VM: Initialized with %u global vars, sparse self vars (hashmap), %u functions mapped\n", ctx->globalVarCount, (uint32_t) shlen(ctx->codeIndexByName));
 
     return ctx;
 }
@@ -3978,9 +3988,9 @@ void VM_buildCrossReferences(VMContext* ctx) {
                 uint32_t funcIdx = resolveFuncOperand(ed);
                 if (dw->func.functionCount > funcIdx) {
                     const char* funcName = dw->func.functions[funcIdx].name;
-                    ptrdiff_t codeMapIdx = shgeti(ctx->funcMap, (char*) funcName);
+                    ptrdiff_t codeMapIdx = shgeti(ctx->codeIndexByName, (char*) funcName);
                     if (codeMapIdx >= 0) {
-                        int32_t targetIdx = ctx->funcMap[codeMapIdx].value;
+                        int32_t targetIdx = ctx->codeIndexByName[codeMapIdx].value;
                         ptrdiff_t mapIdx = hmgeti(ctx->crossRefMap, targetIdx);
                         if (0 > mapIdx) {
                             int32_t* callers = nullptr;
@@ -4146,7 +4156,7 @@ void VM_free(VMContext* ctx) {
     free(ctx->globalVars);
 
     // Free hash maps
-    shfree(ctx->funcMap);
+    shfree(ctx->codeIndexByName);
     shfree(ctx->globalVarNameMap);
     shfree(ctx->selfVarNameMap);
     repeat(shlen(ctx->codeLocalsMap), i) {

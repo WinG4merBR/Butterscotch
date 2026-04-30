@@ -154,7 +154,7 @@ int32_t Runner_pushInstancesForTarget(Runner* runner, int32_t target) {
         return base;
     }
     if (target >= 100000) {
-        Instance* inst = hmget(runner->instancesToId, target);
+        Instance* inst = hmget(runner->instancesById, target);
         if (inst != nullptr) arrput(runner->instanceSnapshots, inst);
         return base;
     }
@@ -528,7 +528,7 @@ static void Runner_drawTileLayer(Runner* runner, RoomLayerTilesData* data, float
             float dstX = (float) (tx * tileW) + layerOffsetX + (mirror ? (float) tileW : 0.0f);
             float dstY = (float) (ty * tileH) + layerOffsetY + (flip ? (float) tileH : 0.0f);
 
-            runner->renderer->vtable->drawSpritePart(runner->renderer, tpagIndex, srcX, srcY, (int32_t) tileW, (int32_t) tileH, dstX, dstY, xscale, yscale, 0xFFFFFF, 1.0f);
+            runner->renderer->vtable->drawSpritePart(runner->renderer, tpagIndex, srcX, srcY, (int32_t) tileW, (int32_t) tileH, dstX, dstY, xscale, yscale, 0.0f, 0.0f, 0.0f, 0xFFFFFF, 1.0f);
         }
     }
 }
@@ -849,14 +849,14 @@ static Instance* createAndInitInstance(Runner* runner, int32_t instanceId, int32
     inst->depth = objDef->depth;
     inst->maskIndex = objDef->textureMaskId;
 
-    hmput(runner->instancesToId, instanceId, inst);
+    hmput(runner->instancesById, instanceId, inst);
     arrput(runner->instances, inst);
     Runner_addInstanceToObjectLists(runner, inst);
     runner->drawableListStructureDirty = true;
 
 #ifdef ENABLE_VM_TRACING
     if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, objDef->name) != -1) {
-        fprintf(stderr, "VM: Instance %s (%d) created at (%f, %f)\n", objDef->name, instanceId, x, y);
+        fprintf(stderr, "VM: Instance %s (instanceId=%d,objectIndex=%d) created at (%f, %f)\n", objDef->name, instanceId, inst->objectIndex, x, y);
     }
 #endif
 
@@ -876,7 +876,7 @@ static Instance** takePersistentInstances(Runner* runner) {
 #ifdef ENABLE_VM_TRACING
             GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
             if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, gameObject->name) != -1) {
-                fprintf(stderr, "VM: Instance %s (%d) has been persisted at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->x, inst->y);
+                fprintf(stderr, "VM: Instance %s (instanceId=%d,objectIndex=%d) has been persisted at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->objectIndex, inst->x, inst->y);
             }
 #endif
 
@@ -885,11 +885,11 @@ static Instance** takePersistentInstances(Runner* runner) {
 #ifdef ENABLE_VM_TRACING
             GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
             if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, gameObject->name) != -1) {
-                fprintf(stderr, "VM: Instance %s (%d) destroyed at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->x, inst->y);
+                fprintf(stderr, "VM: Instance %s (instanceId=%d,objectIndex=%d) destroyed at (%f, %f) due to room change\n", gameObject->name, inst->instanceId, inst->objectIndex, inst->x, inst->y);
             }
 #endif
 
-            hmdel(runner->instancesToId, inst->instanceId);
+            hmdel(runner->instancesById, inst->instanceId);
             Instance_free(inst);
         }
     }
@@ -1096,7 +1096,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
         RoomGameObject* roomObj = &room->gameObjects[i];
 
         // Skip if a persistent instance carried over from the previous room already owns this ID (re-entering the persistent instance's home room, don't create a duplicate!).
-        if (hmget(runner->instancesToId, roomObj->instanceID) != nullptr) continue;
+        if (hmget(runner->instancesById, roomObj->instanceID) != nullptr) continue;
         if (isObjectDisabled(runner, roomObj->objectDefinition)) continue;
 
         Instance* inst = createAndInitInstance(runner, roomObj->instanceID, roomObj->objectDefinition, (GMLReal) roomObj->x, (GMLReal) roomObj->y);
@@ -1115,7 +1115,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
             if (layer->type != RoomLayerType_Instances || layer->instancesData == nullptr) continue;
             RoomLayerInstancesData* layerData = layer->instancesData;
             repeat(layerData->instanceCount, ii) {
-                Instance* inst = hmget(runner->instancesToId, layerData->instanceIds[ii]);
+                Instance* inst = hmget(runner->instancesById, layerData->instanceIds[ii]);
                 if (inst != nullptr) {
                     inst->depth = layer->depth;
                 }
@@ -1131,11 +1131,11 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
     repeat(room->gameObjectCount, i) {
         RoomGameObject* roomObj = &room->gameObjects[i];
 
-        Instance* inst = hmget(runner->instancesToId, roomObj->instanceID);
+        Instance* inst = hmget(runner->instancesById, roomObj->instanceID);
         if (inst == nullptr) continue;
 
         // Skip instances that already had their Create event fired (persistent carry-overs
-        // that hmget also matches, since instancesToId still holds them).
+        // that hmget also matches, since instancesById still holds them).
         if (inst->createEventFired) continue;
         inst->createEventFired = true;
 
@@ -1171,7 +1171,7 @@ static void cleanupState(Runner* runner) {
 
     // Free all instances
     repeat(arrlen(runner->instances), i) {
-        hmdel(runner->instancesToId, runner->instances[i]->instanceId);
+        hmdel(runner->instancesById, runner->instances[i]->instanceId);
         Instance_free(runner->instances[i]);
     }
     arrfree(runner->instances);
@@ -1186,7 +1186,7 @@ static void cleanupState(Runner* runner) {
             SavedRoomState* state = &runner->savedRoomStates[i];
             int32_t savedCount = (int32_t) arrlen(state->instances);
             repeat(savedCount, j) {
-                hmdel(runner->instancesToId, state->instances[j]->instanceId);
+                hmdel(runner->instancesById, state->instances[j]->instanceId);
                 Instance_free(state->instances[j]);
             }
             arrfree(state->instances);
@@ -1200,15 +1200,15 @@ static void cleanupState(Runner* runner) {
     // Free struct instances (created via @@NewGMLObject@@). Anything still here at shutdown is leaked refs or a reference cycle - bulk free regardless of refCount.
     repeat(arrlen(runner->structInstances), i) {
         Instance* s = runner->structInstances[i];
-        hmdel(runner->instancesToId, s->instanceId);
+        hmdel(runner->instancesById, s->instanceId);
         s->structRegistryIndex = -1;
         Instance_free(s);
     }
     arrfree(runner->structInstances);
     runner->structInstances = nullptr;
 
-    hmfree(runner->instancesToId);
-    runner->instancesToId = nullptr;
+    hmfree(runner->instancesById);
+    runner->instancesById = nullptr;
     hmfree(runner->tileLayerMap);
     runner->tileLayerMap = nullptr;
     freeRuntimeLayersArray(&runner->runtimeLayers);
@@ -1436,7 +1436,7 @@ void Runner_destroyInstance(MAYBE_UNUSED Runner* runner, Instance* inst) {
 #ifdef ENABLE_VM_TRACING
     GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
     if (shgeti(runner->vmContext->instanceLifecyclesToBeTraced, "*") != -1 || shgeti(runner->vmContext->instanceLifecyclesToBeTraced, gameObject->name) != -1) {
-        fprintf(stderr, "VM: Instance %s (%d) destroyed\n", gameObject->name, inst->instanceId);
+        fprintf(stderr, "VM: Instance %s (instanceId=%d,objectIndex=%d) destroyed\n", gameObject->name, inst->instanceId, inst->objectIndex);
     }
 #endif
 }
@@ -1489,8 +1489,8 @@ static void Runner_sweepDeadStructs(Runner* runner) {
         if (s->refCount > 1) continue; // still referenced by user code
         require(s->refCount == 1);
 
-        // Remove from runner->instancesToId so future findInstanceByTarget(id) returns nullptr.
-        hmdel(runner->instancesToId, s->instanceId);
+        // Remove from runner->instancesById so future findInstanceByTarget(id) returns nullptr.
+        hmdel(runner->instancesById, s->instanceId);
 
         // O(1) swap-remove from structInstances, keeping structRegistryIndex in sync.
         int32_t lastIdx = (int32_t) arrlen(runner->structInstances) - 1;
@@ -1516,7 +1516,7 @@ void Runner_cleanupDestroyedInstances(Runner* runner) {
             runner->instances[writeIdx++] = inst;
         } else {
             Runner_removeInstanceFromObjectLists(runner, inst);
-            hmdel(runner->instancesToId, inst->instanceId);
+            hmdel(runner->instancesById, inst->instanceId);
             Instance_free(inst);
             // Cached drawables hold raw Instance* that we just freed; force a rebuild before the next draw.
             runner->drawableListStructureDirty = true;
@@ -1946,7 +1946,7 @@ static void persistRoomState(Runner* runner, int32_t roomIndex) {
     // Free any previously saved instances (from an earlier visit)
     int32_t prevSavedCount = (int32_t) arrlen(state->instances);
     repeat(prevSavedCount, i) {
-        hmdel(runner->instancesToId, state->instances[i]->instanceId);
+        hmdel(runner->instancesById, state->instances[i]->instanceId);
         Instance_free(state->instances[i]);
     }
     arrfree(state->instances);
@@ -1965,7 +1965,7 @@ static void persistRoomState(Runner* runner, int32_t roomIndex) {
         } else if (inst->active) {
             arrput(state->instances, inst);
         } else {
-            hmdel(runner->instancesToId, inst->instanceId);
+            hmdel(runner->instancesById, inst->instanceId);
             Instance_free(inst);
         }
     }
