@@ -1,4 +1,5 @@
 #include "vm_builtins.h"
+#include "binary_utils.h"
 #include "instance.h"
 #include "json_reader.h"
 #include "runner.h"
@@ -2355,7 +2356,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
         codeId = -1;
 
 #if IS_BC17_OR_HIGHER_ENABLED
-        // In GMS 2 BC17+, "scriptName" in source code is compiled as a FUNC-table index (same as builtinMethod). Resolve funcIdx -> codeIndex via funcMap.
+        // In GMS 2 BC17+, "scriptName" in source code is compiled as a FUNC-table index (same as builtinMethod). Resolve funcIdx -> codeIndex via codeIndexByName.
         if (IS_BC17_OR_HIGHER(ctx) && rawArg >= 0 && ctx->dataWin->func.functionCount > (uint32_t) rawArg) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
@@ -4680,19 +4681,16 @@ static RValue builtin_bufferWrite(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
             uint16_t val = (uint16_t) RValue_toInt32(args[2]);
             gmlBufferEnsureSize(buf, buf->position + 2);
             if (buf->position + 2 <= buf->size) {
-                buf->data[buf->position] = (uint8_t) (val & 0xFF);
-                buf->data[buf->position + 1] = (uint8_t) ((val >> 8) & 0xFF);
+                BinaryUtils_writeUint16(buf->data + buf->position, val);
             }
             buf->position += 2;
             break;
         }
         case GML_BUFTYPE_S16: {
             int16_t val = (int16_t) RValue_toInt32(args[2]);
-            uint16_t uval = (uint16_t) val;
             gmlBufferEnsureSize(buf, buf->position + 2);
             if (buf->position + 2 <= buf->size) {
-                buf->data[buf->position] = (uint8_t) (uval & 0xFF);
-                buf->data[buf->position + 1] = (uint8_t) ((uval >> 8) & 0xFF);
+                BinaryUtils_writeUint16(buf->data + buf->position, (uint16_t) val);
             }
             buf->position += 2;
             break;
@@ -4700,13 +4698,9 @@ static RValue builtin_bufferWrite(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
         case GML_BUFTYPE_U32:
         case GML_BUFTYPE_S32: {
             int32_t val = RValue_toInt32(args[2]);
-            uint32_t uval = (uint32_t) val;
             gmlBufferEnsureSize(buf, buf->position + 4);
             if (buf->position + 4 <= buf->size) {
-                buf->data[buf->position] = (uint8_t) (uval & 0xFF);
-                buf->data[buf->position + 1] = (uint8_t) ((uval >> 8) & 0xFF);
-                buf->data[buf->position + 2] = (uint8_t) ((uval >> 16) & 0xFF);
-                buf->data[buf->position + 3] = (uint8_t) ((uval >> 24) & 0xFF);
+                BinaryUtils_writeUint32(buf->data + buf->position, (uint32_t) val);
             }
             buf->position += 4;
             break;
@@ -4715,7 +4709,7 @@ static RValue builtin_bufferWrite(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
             float val = (float) RValue_toReal(args[2]);
             gmlBufferEnsureSize(buf, buf->position + 4);
             if (buf->position + 4 <= buf->size) {
-                memcpy(buf->data + buf->position, &val, 4);
+                BinaryUtils_writeFloat32(buf->data + buf->position, val);
             }
             buf->position += 4;
             break;
@@ -4724,7 +4718,7 @@ static RValue builtin_bufferWrite(MAYBE_UNUSED VMContext* ctx, RValue* args, MAY
             double val = (double) RValue_toReal(args[2]);
             gmlBufferEnsureSize(buf, buf->position + 8);
             if (buf->position + 8 <= buf->size) {
-                memcpy(buf->data + buf->position, &val, 8);
+                BinaryUtils_writeFloat64(buf->data + buf->position, val);
             }
             buf->position += 8;
             break;
@@ -4794,7 +4788,7 @@ static RValue builtin_bufferRead(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYB
         }
         case GML_BUFTYPE_U16: {
             if (buf->position + 2 <= buf->size) {
-                uint16_t val = (uint16_t) buf->data[buf->position] | ((uint16_t) buf->data[buf->position + 1] << 8);
+                uint16_t val = BinaryUtils_readUint16(buf->data + buf->position);
                 result = RValue_makeReal((GMLReal) val);
             }
             buf->position += 2;
@@ -4802,18 +4796,14 @@ static RValue builtin_bufferRead(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYB
         }
         case GML_BUFTYPE_S16: {
             if (buf->position + 2 <= buf->size) {
-                uint16_t uval = (uint16_t) buf->data[buf->position] | ((uint16_t) buf->data[buf->position + 1] << 8);
-                result = RValue_makeReal((GMLReal) (int16_t) uval);
+                result = RValue_makeReal((GMLReal) BinaryUtils_readInt16(buf->data + buf->position));
             }
             buf->position += 2;
             break;
         }
         case GML_BUFTYPE_U32: {
             if (buf->position + 4 <= buf->size) {
-                uint32_t val = (uint32_t) buf->data[buf->position]
-                    | ((uint32_t) buf->data[buf->position + 1] << 8)
-                    | ((uint32_t) buf->data[buf->position + 2] << 16)
-                    | ((uint32_t) buf->data[buf->position + 3] << 24);
+                uint32_t val = BinaryUtils_readUint32(buf->data + buf->position);
                 result = RValue_makeReal((GMLReal) val);
             }
             buf->position += 4;
@@ -4821,19 +4811,14 @@ static RValue builtin_bufferRead(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYB
         }
         case GML_BUFTYPE_S32: {
             if (buf->position + 4 <= buf->size) {
-                uint32_t uval = (uint32_t) buf->data[buf->position]
-                    | ((uint32_t) buf->data[buf->position + 1] << 8)
-                    | ((uint32_t) buf->data[buf->position + 2] << 16)
-                    | ((uint32_t) buf->data[buf->position + 3] << 24);
-                result = RValue_makeReal((GMLReal) (int32_t) uval);
+                result = RValue_makeReal((GMLReal) BinaryUtils_readInt32(buf->data + buf->position));
             }
             buf->position += 4;
             break;
         }
         case GML_BUFTYPE_F32: {
             if (buf->position + 4 <= buf->size) {
-                float val;
-                memcpy(&val, buf->data + buf->position, 4);
+                float val = BinaryUtils_readFloat32(buf->data + buf->position);
                 result = RValue_makeReal((GMLReal) val);
             }
             buf->position += 4;
@@ -4841,8 +4826,7 @@ static RValue builtin_bufferRead(MAYBE_UNUSED VMContext* ctx, RValue* args, MAYB
         }
         case GML_BUFTYPE_F64: {
             if (buf->position + 8 <= buf->size) {
-                double val;
-                memcpy(&val, buf->data + buf->position, 8);
+                double val = BinaryUtils_readFloat64(buf->data + buf->position);
                 result = RValue_makeReal((GMLReal) val);
             }
             buf->position += 8;
@@ -7203,7 +7187,7 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
         codeIndex = args[0].method->codeIndex;
     } else {
         // Raw funcIdx pushed via "Push.i <funcIdx>; Conv.i.v" (no method() wrapper used when no static binding is needed).
-        // Resolve via FUNC chunk name -> funcMap, matching builtinMethod's lookup.
+        // Resolve via FUNC chunk name -> codeIndexByName, matching builtinMethod's lookup.
         int32_t rawArg = RValue_toInt32(args[0]);
         codeIndex = rawArg;
         if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {

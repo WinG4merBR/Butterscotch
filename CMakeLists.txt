@@ -131,11 +131,6 @@ if(PLATFORM STREQUAL "glfw")
             $<TARGET_FILE_DIR:butterscotch>/gamecontrollerdb.txt
     )
 elseif(PLATFORM STREQUAL "ps3")
- # The PS2 EE has a single-precision FPU only, so double is software-emulated
-    add_compile_definitions(USE_FLOAT_REALS)
-    # By disabling Int64 support, we can fit the entire RValue struct in 8 bytes, improving performance and memory usage
-    add_compile_definitions(NO_RVALUE_INT64)
-
     # Butterscotch VM/interpreter profiler
     option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" OFF)
     if(ENABLE_VM_GML_PROFILER)
@@ -177,6 +172,7 @@ elseif(PLATFORM STREQUAL "ps3")
 
     # Platform identifier for PS3-specific code paths
     add_compile_definitions(PLATFORM_PS3)
+    add_compile_definitions(IS_BIG_ENDIAN)
     set(CMAKE_EXE_LINKER_FLAGS "-mhard-float -fmodulo-sched -Wl,--gc-sections -L$ENV{PS3DEV}/ppu/lib -L$ENV{PS3DEV}/portlibs/ppu/lib")
     target_link_libraries(butterscotch m gcm_sys rsx sysutil io audio rt lv2 io audio bz2)
 

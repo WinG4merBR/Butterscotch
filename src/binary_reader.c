@@ -50,45 +50,48 @@ uint8_t BinaryReader_readUint8(BinaryReader* reader) {
 }
 
 int16_t BinaryReader_readInt16(BinaryReader* reader) {
-    uint8_t bytes[2];
-    readCheck(reader, bytes, sizeof(bytes));
-    return (int16_t) BinaryUtils_readUint16(bytes);
+    uint16_t value;
+    readCheck(reader, &value, sizeof(value));
+    return (int16_t) BinaryUtils_toLittle16(value);
 }
 
 uint16_t BinaryReader_readUint16(BinaryReader* reader) {
-    uint8_t bytes[2];
-    readCheck(reader, bytes, sizeof(bytes));
-    return BinaryUtils_readUint16(bytes);
+    uint16_t value;
+    readCheck(reader, &value, sizeof(value));
+    return BinaryUtils_toLittle16(value);
 }
 
 int32_t BinaryReader_readInt32(BinaryReader* reader) {
-    uint8_t bytes[4];
-    readCheck(reader, bytes, sizeof(bytes));
-    return (int32_t) BinaryUtils_readUint32(bytes);
+    uint32_t value;
+    readCheck(reader, &value, sizeof(value));
+    return (int32_t) BinaryUtils_toLittle32(value);
 }
 
 uint32_t BinaryReader_readUint32(BinaryReader* reader) {
-    uint8_t bytes[4];
-    readCheck(reader, bytes, sizeof(bytes));
-    return BinaryUtils_readUint32(bytes);
+    uint32_t value;
+    readCheck(reader, &value, sizeof(value));
+    return BinaryUtils_toLittle32(value);
 }
 
 float BinaryReader_readFloat32(BinaryReader* reader) {
-    uint8_t bytes[4];
-    readCheck(reader, bytes, sizeof(bytes));
-    return BinaryUtils_readFloat32(bytes);
+    uint32_t bits;
+    float value;
+    readCheck(reader, &bits, sizeof(bits));
+    bits = BinaryUtils_toLittle32(bits);
+    memcpy(&value, &bits, sizeof(value));
+    return value;
 }
 
 uint64_t BinaryReader_readUint64(BinaryReader* reader) {
-    uint8_t bytes[8];
-    readCheck(reader, bytes, sizeof(bytes));
-    return BinaryUtils_readUint64(bytes);
+    uint64_t value;
+    readCheck(reader, &value, sizeof(value));
+    return BinaryUtils_toLittle64(value);
 }
 
 int64_t BinaryReader_readInt64(BinaryReader* reader) {
-    uint8_t bytes[8];
-    readCheck(reader, bytes, sizeof(bytes));
-    return (int64_t) BinaryUtils_readUint64(bytes);
+    uint64_t value;
+    readCheck(reader, &value, sizeof(value));
+    return (int64_t) BinaryUtils_toLittle64(value);
 }
 
 bool BinaryReader_readBool32(BinaryReader* reader) {
