@@ -1701,7 +1701,7 @@ static void handleConv(VMContext* ctx, uint8_t srcType, uint8_t dstType, uint8_t
         case 0x5F: result = val; break;
 
         default:
-            fprintf(stderr, "VM: Conv unhandled conversion 0x%02X (src=0x%X dst=0x%X)\n", convKey, srcType, dstType);
+            fprintf(stderr, "VM: [%s] Conv unhandled conversion 0x%02X (src=0x%X dst=0x%X)\n", ctx->currentCodeName, convKey, srcType, dstType);
             result = val;
             break;
     }
@@ -2273,7 +2273,7 @@ static void handlePushEnv(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
         return;
     }
 
-    fprintf(stderr, "VM: PushEnv with unhandled target %d\n", target);
+    fprintf(stderr, "VM: [%s] PushEnv with unhandled target %d\n", ctx->currentCodeName, target);
     ctx->ip = instrAddr + jumpOffset;
 }
 
