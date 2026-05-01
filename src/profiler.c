@@ -10,8 +10,6 @@
 
 #if defined(PLATFORM_PS2)
 #include <timer.h>
-#elif defined(PLATFORM_PS3)
-#include <sys/systime.h>
 #elif defined(_WIN32)
 #include <windows.h>
 #else
@@ -27,8 +25,6 @@ static uint64_t nowNanos(void) {
     uint64_t sec = t / clk;
     uint64_t rem = t % clk;
     return sec * 1000000000ull + (rem * 1000000000ull) / clk;
-#elif defined(PLATFORM_PS3)
-    return ((double)__builtin_ppc_get_timebase()/(double)sysGetTimebaseFrequency());
 #elif defined(_WIN32)
     static LARGE_INTEGER freq;
     static bool freqInitialized = false;
@@ -45,7 +41,7 @@ static uint64_t nowNanos(void) {
     return sec * 1000000000ull + (rem * 1000000000ull) / f;
 #else
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t) ts.tv_sec * 1000000000ull + (uint64_t) ts.tv_nsec;
 #endif
 }
