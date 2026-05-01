@@ -10,11 +10,20 @@
 #include <math.h>
 
 #include "stb_image.h"
+#include "stb_image_resize2.h"
 #include "stb_ds.h"
 #include "utils.h"
 #include "image_decoder.h"
 
 GLAPI void GLAPIENTRY glActiveTexture( GLenum texture ) { return; };
+
+#define I_WANT_MY_GAME_TO_LOOK_LIKE_ASS 0
+
+#if I_WANT_MY_GAME_TO_LOOK_LIKE_ASS
+#define UV_SCALE 0.5f
+#else
+#define UV_SCALE 1.0f
+#endif
 
 // ===[ Helpers ]===
 static void glApplyViewport(GLLegacyRenderer* gl, int32_t x, int32_t y, int32_t w, int32_t h) {
@@ -211,17 +220,34 @@ static bool ensureTextureLoaded(GLLegacyRenderer* gl, uint32_t pageId) {
 
     int w, h;
     bool gm2022_5 = DataWin_isVersionAtLeast(dw, 2022, 5, 0, 0);
+#if I_WANT_MY_GAME_TO_LOOK_LIKE_ASS
+    uint8_t* pixels_og = ImageDecoder_decodeToRgba(txtr->blobData, (size_t) txtr->blobSize, gm2022_5, &w, &h);
+
+    uint8_t* pixels = malloc((w/2) * (h/2) * 4);
+    if (!pixels) {
+        free(pixels_og);
+    }
+
+    stbir_resize(
+        pixels_og, w, h, w*4, 
+        pixels, (w/2), h/2, (w/2)*4, 
+        STBIR_RGBA, STBIR_TYPE_UINT8, 
+        STBIR_EDGE_CLAMP, STBIR_FILTER_POINT_SAMPLE);
+
+    free(pixels_og);
+#else
     uint8_t* pixels = ImageDecoder_decodeToRgba(txtr->blobData, (size_t) txtr->blobSize, gm2022_5, &w, &h);
+#endif
     if (pixels == nullptr) {
         fprintf(stderr, "GL: Failed to decode TXTR page %u\n", pageId);
         return false;
     }
 
-    gl->textureWidths[pageId] = w;
-    gl->textureHeights[pageId] = h;
+    gl->textureWidths[pageId] = w*UV_SCALE;
+    gl->textureHeights[pageId] = h*UV_SCALE;
     
     glBindTexture(GL_TEXTURE_2D, gl->glTextures[pageId]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w*UV_SCALE, h*UV_SCALE, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -283,22 +309,22 @@ static void glDrawSprite(Renderer* renderer, int32_t tpagIndex, float x, float y
     glBegin(GL_QUADS);
         // Vertex 0: top-left
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v0);
+        glTexCoord2f(u0*UV_SCALE, v0*UV_SCALE);
         glVertex2f(x0, y0);
 
         // Vertex 1: top-right
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v0);
+        glTexCoord2f(u1*UV_SCALE, v0*UV_SCALE);
         glVertex2f(x1, y1);
 
         // Vertex 2: bottom-right
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v1);
+        glTexCoord2f(u1*UV_SCALE, v1*UV_SCALE);
         glVertex2f(x2, y2);
 
         // Vertex 3: bottom-left
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v1);
+        glTexCoord2f(u0*UV_SCALE, v1*UV_SCALE);
         glVertex2f(x3, y3);
     glEnd();
 }
@@ -326,19 +352,19 @@ static void glDrawSpritePos(Renderer* renderer, int32_t tpagIndex, float x1, flo
 
     glBegin(GL_QUADS);
         glColor4f(1.0f, 1.0f, 1.0f, alpha);
-        glTexCoord2f(u0, v0);
+        glTexCoord2f(u0*UV_SCALE, v0*UV_SCALE);
         glVertex2f(x1, y1);
 
         glColor4f(1.0f, 1.0f, 1.0f, alpha);
-        glTexCoord2f(u1, v0);
+        glTexCoord2f(u1*UV_SCALE, v0*UV_SCALE);
         glVertex2f(x2, y2);
 
         glColor4f(1.0f, 1.0f, 1.0f, alpha);
-        glTexCoord2f(u1, v1);
+        glTexCoord2f(u1*UV_SCALE, v1*UV_SCALE);
         glVertex2f(x3, y3);
 
         glColor4f(1.0f, 1.0f, 1.0f, alpha);
-        glTexCoord2f(u0, v1);
+        glTexCoord2f(u0*UV_SCALE, v1*UV_SCALE);
         glVertex2f(x4, y4);
     glEnd();
 }
@@ -395,16 +421,16 @@ static void glDrawSpritePart(Renderer* renderer, int32_t tpagIndex, int32_t srcO
 
     glBegin(GL_QUADS);
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v0); glVertex2f(cx0, cy0);
+        glTexCoord2f(u0*UV_SCALE, v0*UV_SCALE); glVertex2f(cx0, cy0);
 
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v0); glVertex2f(cx1, cy1);
+        glTexCoord2f(u1*UV_SCALE, v0*UV_SCALE); glVertex2f(cx1, cy1);
 
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u1, v1); glVertex2f(cx2, cy2);
+        glTexCoord2f(u1*UV_SCALE, v1*UV_SCALE); glVertex2f(cx2, cy2);
 
         glColor4f(r, g, b, alpha);
-        glTexCoord2f(u0, v1); glVertex2f(cx3, cy3);
+        glTexCoord2f(u0*UV_SCALE, v1*UV_SCALE); glVertex2f(cx3, cy3);
     glEnd();
 }
 
@@ -754,19 +780,19 @@ static void glDrawText(Renderer* renderer, const char* text, float x, float y, f
 
                         glBegin(GL_QUADS);
                             glColor4f(r, g, b, alpha);
-                            glTexCoord2f(u0, v0);
+                            glTexCoord2f(u0*UV_SCALE, v0*UV_SCALE);
                             glVertex2f(px0, py0);
 
                             glColor4f(r, g, b, alpha);
-                            glTexCoord2f(u1, v0);
+                            glTexCoord2f(u1*UV_SCALE, v0*UV_SCALE);
                             glVertex2f(px1, py1);
 
                             glColor4f(r, g, b, alpha);
-                            glTexCoord2f(u1, v1);
+                            glTexCoord2f(u1*UV_SCALE, v1*UV_SCALE);
                             glVertex2f(px2, py2);
 
                             glColor4f(r, g, b, alpha);
-                            glTexCoord2f(u0, v1);
+                            glTexCoord2f(u0*UV_SCALE, v1*UV_SCALE);
                             glVertex2f(px3, py3);
                         glEnd();
 
@@ -917,19 +943,19 @@ static void glDrawTextColor(Renderer* renderer, const char* text, float x, float
 
                         glBegin(GL_QUADS);
                             glColor4ub(BGR_R(c1), BGR_G(c1), BGR_B(c1), alpha * 255);
-                            glTexCoord2f(u0, v0);
+                            glTexCoord2f(u0*UV_SCALE, v0*UV_SCALE);
                             glVertex2f(px0, py0);
 
                             glColor4ub(BGR_R(c2), BGR_G(c2), BGR_B(c2), alpha * 255);
-                            glTexCoord2f(u1, v0);
+                            glTexCoord2f(u1*UV_SCALE, v0*UV_SCALE);
                             glVertex2f(px1, py1);
 
                             glColor4ub(BGR_R(c3), BGR_G(c3), BGR_B(c3), alpha * 255);
-                            glTexCoord2f(u1, v1);
+                            glTexCoord2f(u1*UV_SCALE, v1*UV_SCALE);
                             glVertex2f(px2, py2);
 
                             glColor4ub(BGR_R(c4), BGR_G(c4), BGR_B(c4), alpha * 255);
-                            glTexCoord2f(u0, v1);
+                            glTexCoord2f(u0*UV_SCALE, v1*UV_SCALE);
                             glVertex2f(px3, py3);
                         glEnd();
 

@@ -87,7 +87,6 @@ int main(int argc, char* argv[]) {
             .parseAudo = true,
             .skipLoadingPreciseMasksForNonPreciseSprites = true,
             .lazyLoadRooms = true,
-            .eagerlyLoadedRooms = false,
        }
     );
 
