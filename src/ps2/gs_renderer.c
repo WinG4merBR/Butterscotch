@@ -2052,7 +2052,7 @@ static void gsGpuSetAlphaTestEnable(Renderer* renderer, bool enable) {
 static void gsGpuSetAlphaTestRef(Renderer* renderer, uint8_t ref) {
     GsRenderer* gs = (GsRenderer*) renderer;
     GSGLOBAL* g = gs->gsGlobal;
-    g->Test->AREF = ref;
+    g->Test->AREF = alphaToGS(ref);
     g->Test->ATST = 6;  // GREATER (matches GMS semantics: pass when src_alpha > ref)
     g->Test->AFAIL = 0; // KEEP
     // Preset 0 doesn't match any branch in gsKit_set_test, so it just re-emits TEST with current state.
