@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
             .parseGen8 = true,
             .parseOptn = true,
             .parseLang = true,
-            .parseExtn = true,
+            .parseExtn = false,
             .parseSond = true,
             .parseAgrp = true,
             .parseSprt = true,
@@ -85,7 +85,9 @@ int main(int argc, char* argv[]) {
             .parseStrg = true,
             .parseTxtr = true,
             .parseAudo = true,
-            .skipLoadingPreciseMasksForNonPreciseSprites = true
+            .skipLoadingPreciseMasksForNonPreciseSprites = true,
+            .lazyLoadRooms = true,
+            .eagerlyLoadedRooms = false,
        }
     );
 
@@ -109,7 +111,7 @@ int main(int argc, char* argv[]) {
 
 
     // Initialize the audio system
-    AudioSystem* audioSystem = NoopAudioSystem_create();
+    AudioSystem* audioSystem = (AudioSystem*) NoopAudioSystem_create();
 
     // Initialize the runner
     Runner* runner = Runner_create(dataWin, vm, renderer, (FileSystem*) glfwFileSystem, audioSystem);
@@ -292,23 +294,21 @@ int main(int argc, char* argv[]) {
 
         ps3glSwapBuffers();
 
-        // Limit frame rate to room speed (skip in headless mode for max speed!!)
+        double now = PS3_GET_TIME;
+
         if (runner->currentRoom->speed > 0) {
-            double targetFrameTime = 1.0 / (runner->currentRoom->speed);
+            double targetFrameTime = 1.0 / runner->currentRoom->speed;
             double nextFrameTime = lastFrameTime + targetFrameTime;
 
-            // Sleep for most of the remaining time, then spin-wait for precision
-            double remaining = nextFrameTime - PS3_GET_TIME;
-            if (remaining > 0.002) {
-                sysUsleep((uint32_t)((remaining - 0.001) * 1000000.0));
+            if (now < nextFrameTime) {
+                while (PS3_GET_TIME < nextFrameTime) {}
+                lastFrameTime = nextFrameTime;
+            } else {
+                // Frame took too long → resync
+                lastFrameTime = now;
             }
-
-            while (PS3_GET_TIME < nextFrameTime) {
-                // Spin-wait for the remaining sub-millisecond
-            }
-            lastFrameTime = nextFrameTime;
         } else {
-            lastFrameTime = PS3_GET_TIME;
+            lastFrameTime = now;
         }
     }
 
