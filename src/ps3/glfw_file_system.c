@@ -8,15 +8,29 @@
 
 // ===[ Helpers ]===
 
+// Replaces all backslashes (\) with forward slashes (/) in a path string. (dealing with windows paths)
+static inline char* normalizePath(const char* path) {
+    if (path == nullptr) return nullptr;
+    char* normalized = safeStrdup(path);
+    for (int i = 0; normalized[i] != '\0'; i++) {
+        if (normalized[i] == '\\') {
+            normalized[i] = '/';
+        }
+    }
+    return normalized;
+}
+
 // The caller must make sure to free the returned string!
 static char* buildFullPath(GlfwFileSystem* fs, const char* relativePath) {
-    if (strstr(relativePath, fs->basePath) != NULL) return safeStrdup(relativePath);
+    char* normalizedPath = normalizePath(relativePath);
+    if (strstr(normalizedPath, fs->basePath) != nullptr) return normalizedPath;
     size_t baseLen = strlen(fs->basePath);
-    size_t relLen = strlen(relativePath);
+    size_t relLen = strlen(normalizedPath);
     char* fullPath = safeMalloc(baseLen + relLen + 1);
     memcpy(fullPath, fs->basePath, baseLen);
-    memcpy(fullPath + baseLen, relativePath, relLen);
+    memcpy(fullPath + baseLen, normalizedPath, relLen);
     fullPath[baseLen + relLen] = '\0';
+    free(normalizedPath);
     return fullPath;
 }
 
@@ -39,8 +53,8 @@ static char* glfwReadFileText(FileSystem* fs, const char* relativePath) {
     char* fullPath = buildFullPath((GlfwFileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "rb");
     free(fullPath);
-    if (f == NULL)
-        return NULL;
+    if (f == nullptr)
+        return nullptr;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -57,7 +71,7 @@ static bool glfwWriteFileText(FileSystem* fs, const char* relativePath, const ch
     char* fullPath = buildFullPath((GlfwFileSystem*) fs, relativePath);
     FILE* f = fopen(fullPath, "wb");
     free(fullPath);
-    if (f == NULL)
+    if (f == nullptr)
         return false;
 
     size_t len = strlen(contents);
@@ -73,6 +87,38 @@ static bool glfwDeleteFile(FileSystem* fs, const char* relativePath) {
     return result == 0;
 }
 
+static bool glfwReadFileBinary(FileSystem* fs, const char* relativePath, uint8_t** outData, int32_t* outSize) {
+    char* fullPath = buildFullPath((GlfwFileSystem*) fs, relativePath);
+    FILE* f = fopen(fullPath, "rb");
+    free(fullPath);
+    if (f == nullptr)
+        return false;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    uint8_t* data = safeMalloc((size_t) size);
+    size_t bytesRead = fread(data, 1, (size_t) size, f);
+    fclose(f);
+
+    *outData = data;
+    *outSize = (int32_t) bytesRead;
+    return true;
+}
+
+static bool glfwWriteFileBinary(FileSystem* fs, const char* relativePath, const uint8_t* data, int32_t size) {
+    char* fullPath = buildFullPath((GlfwFileSystem*) fs, relativePath);
+    FILE* f = fopen(fullPath, "wb");
+    free(fullPath);
+    if (f == nullptr)
+        return false;
+
+    size_t written = fwrite(data, 1, (size_t) size, f);
+    fclose(f);
+    return written == (size_t) size;
+}
+
 // ===[ Vtable ]===
 
 static FileSystemVtable glfwFileSystemVtable = {
@@ -81,6 +127,8 @@ static FileSystemVtable glfwFileSystemVtable = {
     .readFileText = glfwReadFileText,
     .writeFileText = glfwWriteFileText,
     .deleteFile = glfwDeleteFile,
+    .readFileBinary = glfwReadFileBinary,
+    .writeFileBinary = glfwWriteFileBinary,
 };
 
 // ===[ Lifecycle ]===
@@ -92,9 +140,9 @@ GlfwFileSystem* GlfwFileSystem_create(const char* dataWinPath) {
     // Derive basePath by stripping the filename from dataWinPath
     const char* lastSlash = strrchr(dataWinPath, '/');
     const char* lastBackslash = strrchr(dataWinPath, '\\');
-    if (lastBackslash != NULL && (lastSlash == NULL || lastBackslash > lastSlash))
+    if (lastBackslash != nullptr && (lastSlash == nullptr || lastBackslash > lastSlash))
         lastSlash = lastBackslash;
-    if (lastSlash != NULL) {
+    if (lastSlash != nullptr) {
         size_t dirLen = (size_t) (lastSlash - dataWinPath + 1); // include the trailing /
         fs->basePath = safeMalloc(dirLen + 1);
         memcpy(fs->basePath, dataWinPath, dirLen);
@@ -108,7 +156,7 @@ GlfwFileSystem* GlfwFileSystem_create(const char* dataWinPath) {
 }
 
 void GlfwFileSystem_destroy(GlfwFileSystem* fs) {
-    if (fs == NULL) return;
+    if (fs == nullptr) return;
     free(fs->basePath);
     free(fs);
 }
