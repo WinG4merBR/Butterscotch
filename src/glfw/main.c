@@ -120,6 +120,7 @@ typedef struct {
     int exitAtFrame;
     int traceBytecodeAfterFrame;
     double speedMultiplier;
+    double fastForwardSpeed;
     int seed;
     bool hasSeed;
     bool debug;
@@ -210,6 +211,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
         {"dump-frame-json", required_argument, nullptr, 'j'},
         {"dump-frame-json-file", required_argument, nullptr, 'J'},
         {"speed", required_argument, nullptr, 'M'},
+        {"fast-forward-speed", required_argument, nullptr, 'X'},
         {"seed", required_argument, nullptr, 'Z'},
         {"debug", no_argument, nullptr, 'D'},
         {"disassemble", required_argument, nullptr, 'A'},
@@ -230,6 +232,7 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
     args->exitAtFrame = -1;
     args->traceBytecodeAfterFrame = 0;
     args->speedMultiplier = 1.0;
+    args->fastForwardSpeed = 0.0;
     args->renderer = "gl";
     args->osType = OS_WINDOWS;
     args->profilerFramesBetween = 0;
@@ -344,6 +347,16 @@ static void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) 
                     exit(1);
                 }
                 args->speedMultiplier = speed;
+                break;
+            }
+            case 'X': {
+                char* endPtr;
+                double speed = strtod(optarg, &endPtr);
+                if (*endPtr != '\0' || speed <= 0.0) {
+                    fprintf(stderr, "Error: Invalid speed '%s' for --fast-forward-speed (must be > 0)\n", optarg);
+                    exit(1);
+                }
+                args->fastForwardSpeed = speed;
                 break;
             }
             case 'D':
@@ -1179,7 +1192,16 @@ int main(int argc, char* argv[]) {
 
         // Limit frame rate to room speed (skip in headless mode for max speed!!)
         if (!args.headless && runner->currentRoom->speed > 0) {
-            double targetFrameTime = 1.0 / (runner->currentRoom->speed * args.speedMultiplier);
+            static bool fastForwardActive = false;
+            static bool fastForwardTabPrev = false;
+            bool fastForwardTabNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
+            if (args.fastForwardSpeed > 0.0 && fastForwardTabNow && !fastForwardTabPrev) {
+                fastForwardActive = !fastForwardActive;
+                lastFrameTime = glfwGetTime();
+            }
+            fastForwardTabPrev = fastForwardTabNow;
+            double effectiveSpeed = (args.fastForwardSpeed > 0.0 && fastForwardActive) ? args.fastForwardSpeed : args.speedMultiplier;
+            double targetFrameTime = 1.0 / (runner->currentRoom->speed * effectiveSpeed);
             double nextFrameTime = lastFrameTime + targetFrameTime;
             // Sleep for most of the remaining time, then spin-wait for precision
             double remaining = nextFrameTime - glfwGetTime();

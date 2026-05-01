@@ -450,6 +450,11 @@ static int compareDrawableDepth(const void* a, const void* b) {
         if (db->tileIndex > da->tileIndex) return -1;
         if (da->tileIndex > db->tileIndex) return 1;
     }
+    // At same depth, newer instances (higher instanceId) draw FIRST (behind), older draw LAST (front).
+    if (da->type == DRAWABLE_INSTANCE && db->type == DRAWABLE_INSTANCE) {
+        if (db->instance->instanceId > da->instance->instanceId) return 1;
+        if (da->instance->instanceId > db->instance->instanceId) return -1;
+    }
     return 0;
 }
 
@@ -1373,6 +1378,9 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     runner->keyboard = RunnerKeyboard_create();
     runner->gamepads = RunnerGamepad_create();
 
+    // Collision compatibility mode is "enabled" for all pre-GM 2022.1 games AND for any post-GM 2022.1 games that have the bit 27 set
+    runner->collisionCompatibilityMode = (dataWin->detectedFormat.major == 1) || (((dataWin->optn.info >> 27) & 1) != 0);
+
     // Build the event dispatch acceleration tables.
     EventSlotMap_build(&runner->eventSlotMap, dataWin);
     ResolvedEventTable_build(&runner->eventTable, dataWin, &runner->eventSlotMap);
@@ -1773,12 +1781,12 @@ static void dispatchCollisionEvents(Runner* runner) {
                     if (bboxSelf.left >= bboxOther.right || bboxOther.left >= bboxSelf.right || bboxSelf.top >= bboxOther.bottom || bboxOther.top >= bboxSelf.bottom)
                         continue;
 
-                    // Precise collision check if either sprite needs it
+                    // Precise collision check if either sprite needs it (per-pixel for sepMasks==1, OBB SAT for rotated sepMasks==2).
                     Sprite* sprOther = Collision_getSprite(dataWin, other);
-                    bool needsPrecise = (sprSelf != nullptr && sprSelf->sepMasks == 1) || (sprOther != nullptr && sprOther->sepMasks == 1);
+                    bool needsPrecise = (sprSelf != nullptr && sprSelf->sepMasks == 1) || (sprOther != nullptr && sprOther->sepMasks == 1) || Collision_obbNeedsSAT(sprSelf, self) || Collision_obbNeedsSAT(sprOther, other);
 
                     if (needsPrecise) {
-                        if (!Collision_instancesOverlapPrecise(dataWin, self, other, bboxSelf, bboxOther)) continue;
+                        if (!Collision_instancesOverlapPrecise(dataWin, runner->collisionCompatibilityMode, self, other, bboxSelf, bboxOther)) continue;
                     }
 
                     // Collision detected! If either instance is solid, restore both to xprevious/yprevious.

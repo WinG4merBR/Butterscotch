@@ -211,6 +211,7 @@ typedef struct {
 // ds_list: dynamic array of RValues
 typedef struct {
     RValue* items; // stb_ds dynamic array of RValues
+    bool freed;    // true when the slot is destroyed and available for reuse by ds_list_create (matches native GMS)
 } DsList;
 
 // ===[ GML Buffer System ]===
@@ -400,6 +401,9 @@ typedef struct Runner {
     // GUI layer size (display_set_gui_size). 0 = auto-match the current view's port size.
     int32_t guiWidth;
     int32_t guiHeight;
+
+    // GMS legacy (pre 2022.1) collision behavior: AABB overlap treats touching edges as overlap.
+    bool collisionCompatibilityMode;
 } Runner;
 
 const char* Runner_getEventName(int32_t eventType, int32_t eventSubtype);

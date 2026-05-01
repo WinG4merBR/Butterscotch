@@ -125,6 +125,18 @@ typedef struct {
     uint32_t eeCacheBumpPtr;           // End of live data
     EeAtlasCacheEntry* eeCacheEntries; // Per-atlas cache state [atlasCount]
     uint32_t* atlasDataSizes;          // On-disk size per atlas (header + compressed data) [atlasCount]
+
+    // GPU state (mirrors what was last sent to GS so we can re-apply after sync_flip clobbers FRAME)
+    uint32_t fbmsk;          // Current FRAME register FBMSK (0 = all channels writable)
+    uint8_t fba;             // Current FBA_1 register value (1 = force FB.A bit to 1 on writeback, 0 = pass through)
+    bool blendModeWarned;    // Set the first time an unsupported blend factor pair is seen
+
+    // gsKit packs PrimAlphaEnable into BOTH the PRIM.ABE bit AND TEX0.TCC.
+    // So toggling ABE off also forces TCC=0, which makes the GS ignore the texture's per-pixel alpha and pull alpha from TA0 (default 0x00) instead.
+    // That breaks textured alpha-mask sprites.
+    // To keep TCC=1 always, we leave PrimAlphaEnable=ON and emulate blend-disable by switching ALPHA to an identity equation (Cs passes through unchanged).
+    bool blendEnabled;       // What the GML last requested via gpu_set_blendenable
+    u64 currentBlendAlpha;   // The ALPHA register value the GML last requested via gpu_set_blendmode[_ext]
 } GsRenderer;
 
 Renderer* GsRenderer_create(GSGLOBAL* gsGlobal);

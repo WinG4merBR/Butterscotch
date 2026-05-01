@@ -46,6 +46,10 @@ target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(butterscotch PUBLIC vendor/stb/ds)
 
 if(PLATFORM STREQUAL "glfw")
+    file(GLOB GL_SOURCES src/gl/*.c)
+    target_sources(butterscotch PRIVATE ${GL_SOURCES})
+    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl)
+
     # Butterscotch VM/interpreter profiler
     option(ENABLE_VM_GML_PROFILER "Enable Butterscotch VM/interpreter profiler" ON)
     if(ENABLE_VM_GML_PROFILER)

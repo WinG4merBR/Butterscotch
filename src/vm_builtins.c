@@ -76,14 +76,25 @@ static DsMapEntry** dsMapGet(Runner* runner, int32_t id) {
 // ===[ DS_LIST SYSTEM ]===
 
 static int32_t dsListCreate(Runner* runner) {
-    DsList newList = { .items = nullptr };
-    int32_t id = (int32_t) arrlen(runner->dsListPool);
+    // Reuse a freed slot if available, matching native GameMaker behavior.
+    // Yes, some games (example: DELTARUNE Chapter 3's obj_board_playercamera_Other_10) rely on ds_list_create reusing the id of a list just destroyed.
+    int32_t poolSize = (int32_t) arrlen(runner->dsListPool);
+    repeat(poolSize, i) {
+        if (runner->dsListPool[i].freed) {
+            runner->dsListPool[i].freed = false;
+            runner->dsListPool[i].items = nullptr;
+            return i;
+        }
+    }
+    DsList newList = { .items = nullptr, .freed = false };
+    int32_t id = poolSize;
     arrput(runner->dsListPool, newList);
     return id;
 }
 
 static DsList* dsListGet(Runner* runner, int32_t id) {
-    if (0 > id || id > (int32_t) arrlen(runner->dsListPool)) return nullptr;
+    if (0 > id || id >= (int32_t) arrlen(runner->dsListPool)) return nullptr;
+    if (runner->dsListPool[id].freed) return nullptr;
     return &runner->dsListPool[id];
 }
 
@@ -479,22 +490,34 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
         case BUILTIN_VAR_BBOX_LEFT: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.left : inst->x);
+            if (!bbox.valid) return RValue_makeReal(inst->x);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) llrint(bbox.left));
+            return RValue_makeReal(bbox.left);
         }
         case BUILTIN_VAR_BBOX_RIGHT: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.right : inst->x);
+            if (!bbox.valid) return RValue_makeReal(inst->x);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) (llrint(bbox.right) - 1));
+            return RValue_makeReal(bbox.right);
         }
         case BUILTIN_VAR_BBOX_TOP: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.top : inst->y);
+            if (!bbox.valid) return RValue_makeReal(inst->y);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) llrint(bbox.top));
+            return RValue_makeReal(bbox.top);
         }
         case BUILTIN_VAR_BBOX_BOTTOM: {
             if (inst == nullptr) break;
             InstanceBBox bbox = Collision_computeBBox(runner->dataWin, inst);
-            return RValue_makeReal(bbox.valid ? bbox.bottom : inst->y);
+            if (!bbox.valid) return RValue_makeReal(inst->y);
+            // Compat mode caches bbox values rounded via lrintf so GML reads see integers; modern mode returns the raw float bbox.
+            if (runner->collisionCompatibilityMode) return RValue_makeReal((GMLReal) (llrint(bbox.bottom) - 1));
+            return RValue_makeReal(bbox.bottom);
         }
         case BUILTIN_VAR_VISIBLE:
             if (inst == nullptr) break;
@@ -857,7 +880,7 @@ RValue VMBuiltins_getVariable(VMContext* ctx, int16_t builtinVarId, const char* 
             break;
     }
 
-    fprintf(stderr, "VM: Unhandled built-in variable read '%s' (arrayIndex=%d)\n", name, arrayIndex);
+    fprintf(stderr, "VM: [%s] Unhandled built-in variable read '%s' (arrayIndex=%d)\n", ctx->currentCodeName, name, arrayIndex);
     return RValue_makeReal(0.0);
 }
 
@@ -1210,7 +1233,7 @@ void VMBuiltins_setVariable(VMContext* ctx, int16_t builtinVarId, const char* na
             break;
     }
 
-    fprintf(stderr, "VM: Unhandled built-in variable write '%s' (arrayIndex=%d)\n", name, arrayIndex);
+    fprintf(stderr, "VM: [%s] Unhandled built-in variable write '%s' (arrayIndex=%d)\n", ctx->currentCodeName, name, arrayIndex);
 }
 
 // ===[ BUILTIN FUNCTION IMPLEMENTATIONS ]===
@@ -1286,7 +1309,14 @@ static RValue builtinCeil(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t arg
 
 static RValue builtinRound(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeReal(0.0);
-    return RValue_makeReal(GMLReal_round(RValue_toReal(args[0])));
+    // GameMaker's round() uses banker's rounding (round half to even), matching llrint() under the default IEEE 754 rounding mode.
+    // C's round()/roundf() rounds half away from zero, which produces different results for x.5 values (e.g. round(2.5) is 2 in GML but 3 with round()).
+    GMLReal v = RValue_toReal(args[0]);
+#ifdef USE_FLOAT_REALS
+    return RValue_makeReal(rintf(v));
+#else
+    return RValue_makeReal(rint(v));
+#endif
 }
 
 static RValue builtinAbs(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
@@ -1401,6 +1431,33 @@ static RValue builtinStringCopy(MAYBE_UNUSED VMContext* ctx, RValue* args, int32
     return RValue_makeOwnedString(result);
 }
 
+static RValue builtinStringFormat(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (3 > argCount) return RValue_makeOwnedString(safeStrdup(""));
+    if (args[0].type == RVALUE_UNDEFINED) return RValue_makeOwnedString(safeStrdup("undefined"));
+
+    GMLReal val = RValue_toReal(args[0]);
+    int32_t tot = RValue_toInt32(args[1]);
+    int32_t dec = RValue_toInt32(args[2]);
+    if (0 > dec) dec = 0;
+    if (15 < dec) dec = 15;
+
+    char numBuf[64];
+    snprintf(numBuf, sizeof(numBuf), "%.*f", (int) dec, (double) val);
+
+    const char* dot = strchr(numBuf, '.');
+    int32_t intLen = (int32_t) (dot ? (dot - numBuf) : (int32_t) strlen(numBuf));
+
+    int32_t leftPad = (tot > intLen) ? (tot - intLen) : 0;
+    int32_t numLen = (int32_t) strlen(numBuf);
+    int32_t totalLen = leftPad + numLen;
+
+    char* result = safeMalloc(totalLen + 1);
+    for (int32_t i = 0; leftPad > i; i++) result[i] = ' ';
+    memcpy(result + leftPad, numBuf, (size_t) numLen);
+    result[totalLen] = '\0';
+    return RValue_makeOwnedString(result);
+}
+
 static RValue builtinStringRepeat(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (2 > argCount) return RValue_makeOwnedString(safeStrdup(""));
     char* str = RValue_toString(args[0]);
@@ -1451,12 +1508,12 @@ static RValue builtinStringDigits(MAYBE_UNUSED VMContext* ctx, RValue* args, int
     int len = strlen(str);
     char* result = (char*)malloc(len + 1);
     if (result == NULL) return RValue_makeOwnedString(safeStrdup(""));
-    
+
     int digitCount = 0;
     for (int i = 0; str[i] != '\0'; i++) {
         if (isdigit(str[i])) result[digitCount++] = str[i];
     }
-    
+
     free(str);
     result[digitCount] = '\0';
 
@@ -1464,7 +1521,7 @@ static RValue builtinStringDigits(MAYBE_UNUSED VMContext* ctx, RValue* args, int
         free(result);
         return RValue_makeOwnedString(safeStrdup(""));
     }
-    
+
     char* exact_result = (char*)realloc(result, digitCount + 1);
     return RValue_makeOwnedString(exact_result ? exact_result : result);
 }
@@ -1725,6 +1782,17 @@ static RValue builtinPointDistance(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     GMLReal dx = RValue_toReal(args[2]) - RValue_toReal(args[0]);
     GMLReal dy = RValue_toReal(args[3]) - RValue_toReal(args[1]);
     return RValue_makeReal(GMLReal_sqrt(dx * dx + dy * dy));
+}
+
+static RValue builtinPointInRectangle(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (6 > argCount) return RValue_makeBool(false);
+    GMLReal px = RValue_toReal(args[0]);
+    GMLReal py = RValue_toReal(args[1]);
+    GMLReal x1 = RValue_toReal(args[2]);
+    GMLReal y1 = RValue_toReal(args[3]);
+    GMLReal x2 = RValue_toReal(args[4]);
+    GMLReal y2 = RValue_toReal(args[5]);
+    return RValue_makeBool(px >= x1 && px <= x2 && py >= y1 && py <= y2);
 }
 
 static RValue builtinDistanceToPoint(VMContext* ctx, RValue* args, int32_t argCount) {
@@ -2591,6 +2659,30 @@ static RValue builtinDsListAdd(VMContext* ctx, RValue* args, int32_t argCount) {
     return RValue_makeUndefined();
 }
 
+static RValue builtinDsListDestroy(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    DsList* list = dsListGet(runner, id);
+    if (list == nullptr) return RValue_makeUndefined();
+    repeat(arrlen(list->items), i) {
+        RValue_free(&list->items[i]);
+    }
+    arrfree(list->items);
+    list->items = nullptr;
+    list->freed = true;
+    return RValue_makeUndefined();
+}
+
+static RValue builtinDsListFindValue(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    Runner* runner = (Runner*) ctx->runner;
+    int32_t id = RValue_toInt32(args[0]);
+    int32_t pos = RValue_toInt32(args[1]);
+    DsList* list = dsListGet(runner, id);
+    if (list == nullptr) return RValue_makeUndefined();
+    if (0 > pos || pos >= (int32_t) arrlen(list->items)) return RValue_makeUndefined();
+    return RValue_makeIndependent(list->items[pos]);
+}
+
 static RValue builtinDsListSize(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     int32_t id = RValue_toInt32(args[0]);
@@ -2651,27 +2743,45 @@ static RValue builtinArrayPush(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_
             RValue* slot = GMLArray_slot(arr, startLen + i);
             RValue val = args[1 + i];
             RValue_free(slot);
-            if (val.type == RVALUE_STRING && val.string != nullptr) {
-                *slot = RValue_makeOwnedString(safeStrdup(val.string));
-            } else if (val.type == RVALUE_ARRAY && val.array != nullptr) {
-                GMLArray_incRef(val.array);
-                val.ownsReference = true;
-                *slot = val;
-#if IS_BC17_OR_HIGHER_ENABLED
-            } else if (val.type == RVALUE_METHOD && val.method != nullptr) {
-                GMLMethod_incRef(val.method);
-                val.ownsReference = true;
-                *slot = val;
-#endif
-            } else if (val.type == RVALUE_STRUCT && val.structInst != nullptr) {
-                Instance_structIncRef(val.structInst);
-                val.ownsReference = true;
-                *slot = val;
-            } else {
-                val.ownsReference = false;
-                *slot = val;
-            }
+            *slot = RValue_makeIndependent(val);
         }
+    }
+    return RValue_makeUndefined();
+}
+
+// array_insert(array, index, values...) - insert one or more values at "index", shifting the tail up. If "index" is past the end, fill the gap with real 0 (see the yyVariable.js for reference).
+static RValue builtinArrayInsert(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
+    if (2 > argCount) return RValue_makeUndefined();
+    if (args[0].type != RVALUE_ARRAY || args[0].array == nullptr) return RValue_makeUndefined();
+    GMLArray* arr = args[0].array;
+    int32_t index = (int32_t) RValue_toReal(args[1]);
+    if (0 > index) index = 0;
+    int32_t toInsert = argCount - 2;
+    int32_t oldLen = (arr->rowCount == 0) ? 0 : arr->rows[0].length;
+
+    // Pad with real 0 if index is past the current end
+    if (index > oldLen) {
+        GMLArray_growTo(arr, index);
+        GMLArrayRow* row = &arr->rows[0];
+        for (int32_t i = oldLen; index > i; i++) {
+            RValue_free(&row->data[i]);
+            row->data[i] = RValue_makeReal(0.0);
+        }
+        oldLen = index;
+    }
+
+    if (0 >= toInsert) return RValue_makeUndefined();
+
+    GMLArray_growTo(arr, oldLen + toInsert);
+    GMLArrayRow* row = &arr->rows[0];
+
+    // Shift tail up by toInsert
+    int32_t tailLen = oldLen - index;
+    if (tailLen > 0) memmove(&row->data[index + toInsert], &row->data[index], (size_t) tailLen * sizeof(RValue));
+
+    // Write inserted values
+    repeat(toInsert, i) {
+        row->data[index + i] = RValue_makeIndependent(args[2 + i]);
     }
     return RValue_makeUndefined();
 }
@@ -2748,7 +2858,7 @@ static RValue builtinPlaceFree(VMContext* ctx, RValue* args, int32_t argCount) {
             InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
             if (!otherBBox.valid) continue;
 
-            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+            if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                 free = false;
                 break;
             }
@@ -2781,7 +2891,7 @@ static bool placeEmptyAt(Runner* runner, Instance* caller, GMLReal testX, GMLRea
             InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
             if (!otherBBox.valid) continue;
 
-            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+            if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                 empty = false;
                 break;
             }
@@ -2812,7 +2922,7 @@ static bool placeFreeAt(Runner* runner, Instance* caller, GMLReal testX, GMLReal
             InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
             if (!otherBBox.valid) continue;
 
-            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+            if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                 free = false;
                 break;
             }
@@ -2844,7 +2954,7 @@ static bool noCollisionWithObject(Runner* runner, Instance* caller, GMLReal test
             InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
             if (!otherBBox.valid) continue;
 
-            if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+            if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                 free = false;
                 break;
             }
@@ -4068,7 +4178,7 @@ static RValue builtinWindowSetCaption(VMContext* ctx, MAYBE_UNUSED RValue* args,
         runner->setWindowTitle(runner->nativeWindow, windowTitle);
         printf("GL: Window title set to: %s\n", val);
     }
-    
+
     free(val);
     return RValue_makeUndefined();
 }
@@ -5167,7 +5277,7 @@ static RValue builtin_drawRectangle(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     return RValue_makeUndefined();
 }
 
-static RValue builtin_drawRectangleColor(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) { 
+static RValue builtin_drawRectangleColor(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     if (runner->renderer == nullptr) return RValue_makeUndefined();
 
@@ -5202,7 +5312,7 @@ static RValue builtin_drawHealthbar(VMContext* ctx, RValue* args, MAYBE_UNUSED i
     uint32_t intermediateColor = Renderer_mixColors(minCol,maxCol,amount);
 
     int32_t direction = RValue_toInt32(args[8]);
-    
+
     bool showBack = RValue_toBool(args[9]);
 
     if (showBack) {
@@ -5937,28 +6047,25 @@ static RValue builtinPlaceMeeting(VMContext* ctx, RValue* args, int32_t argCount
     SpatialGrid_syncGrid(runner, runner->spatialGrid);
 
     if (callerBBox.valid) {
-        SpatialGridRange callerRange = SpatialGrid_computeCellRange(runner->spatialGrid, callerBBox.left, callerBBox.top, callerBBox.right, callerBBox.bottom);
-        bool filterByObject = target >= 0 && 100000 > target;
-        bool filterByInstanceId = target >= 100000;
-        uint32_t queryId = ++runner->collisionQueryCounter;
+        SpatialGridQuery query = SpatialGrid_prepareQuery(runner, callerBBox.left, callerBBox.top, callerBBox.right, callerBBox.bottom, target);
 
-        for (int32_t gx = callerRange.minGridX; callerRange.maxGridX >= gx && !found; gx++) {
-            for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && !found; gy++) {
+        for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx && !found; gx++) {
+            for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy && !found; gy++) {
                 Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
                 int32_t cellLen = (int32_t) arrlen(cell);
                 repeat(cellLen, ci) {
                     Instance* other = cell[ci];
                     if (!other->active || other == caller) continue;
-                    if (other->lastCollisionQueryId == queryId) continue;
-                    other->lastCollisionQueryId = queryId;
+                    if (other->lastCollisionQueryId == query.queryId) continue;
+                    other->lastCollisionQueryId = query.queryId;
 
-                    if (filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, target)) continue;
-                    if (filterByInstanceId && other->instanceId != (uint32_t) target) continue;
+                    if (query.filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, target)) continue;
+                    if (query.filterByInstanceId && other->instanceId != (uint32_t) target) continue;
 
                     InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
                     if (!otherBBox.valid) continue;
 
-                    if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+                    if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                         found = true;
                         break;
                     }
@@ -5996,25 +6103,9 @@ static RValue builtinCollisionLine(VMContext* ctx, RValue* args, int32_t argCoun
         if (!inst->active) continue;
         if (notme && inst == self) continue;
 
+        if (!Collision_lineOverlapsInstance(ctx->dataWin, inst, lx1, ly1, lx2, ly2)) continue;
         InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
-        if (!bbox.valid) continue;
 
-        // Fast reject: line's bounding rect vs instance bbox
-        GMLReal lineLeft   = GMLReal_fmin(lx1, lx2);
-        GMLReal lineRight  = GMLReal_fmax(lx1, lx2);
-        GMLReal lineTop    = GMLReal_fmin(ly1, ly2);
-        GMLReal lineBottom = GMLReal_fmax(ly1, ly2);
-        // bbox.right/bbox.bottom are exclusive (marginRight + 1, marginBottom + 1), so use >= for those comparisons to correctly exclude boundary-touching cases
-        // See GM-HTML5's yyInstance.js "Collision_Line"
-        if (lineLeft >= bbox.right)
-            continue;
-        if (bbox.left > lineRight)
-            continue;
-        if (bbox.top > lineBottom)
-            continue;
-        if (lineTop >= bbox.bottom)
-            continue;
-        
         // Normalize line left-to-right for clipping
         GMLReal xl = lx1, yl = ly1, xr = lx2, yr = ly2;
         if (xl > xr) { GMLReal tmp = xl; xl = xr; xr = tmp; tmp = yl; yl = yr; yr = tmp; }
@@ -6186,11 +6277,9 @@ static RValue builtinCollisionRectangle(VMContext* ctx, RValue* args, int32_t ar
         if (!inst->active) continue;
         if (notme && inst == self) continue;
 
-        InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
-        if (!bbox.valid) continue;
+        if (!Collision_rectOverlapsInstance(ctx->dataWin, inst, x1, y1, x2, y2)) continue;
 
-        // AABB overlap test
-        if (x1 >= bbox.right || bbox.left >= x2 || y1 >= bbox.bottom || bbox.top >= y2) continue;
+        InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
 
         // Precise check if requested and sprite has precise masks
         if (prec != 0) {
@@ -6227,6 +6316,167 @@ static RValue builtinCollisionRectangle(VMContext* ctx, RValue* args, int32_t ar
     return RValue_makeReal((GMLReal) resultId);
 }
 
+// collision_circle(x, y, radius, obj, prec, notme)
+static RValue builtinCollisionCircle(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (6 > argCount) return RValue_makeReal((GMLReal) INSTANCE_NOONE);
+
+    Runner* runner = (Runner*) ctx->runner;
+    GMLReal cx = RValue_toReal(args[0]);
+    GMLReal cy = RValue_toReal(args[1]);
+    GMLReal radius = RValue_toReal(args[2]);
+    int32_t targetObjIndex = RValue_toInt32(args[3]);
+    int32_t prec = RValue_toInt32(args[4]);
+    int32_t notme = RValue_toInt32(args[5]);
+
+    if (0 > radius) radius = -radius;
+    GMLReal radiusSq = radius * radius;
+
+    Instance* self = (Instance*) ctx->currentInstance;
+
+    GMLReal qx1 = cx - radius;
+    GMLReal qy1 = cy - radius;
+    GMLReal qx2 = cx + radius;
+    GMLReal qy2 = cy + radius;
+
+    SpatialGrid_syncGrid(runner, runner->spatialGrid);
+    SpatialGridQuery query = SpatialGrid_prepareQuery(runner, qx1, qy1, qx2, qy2, targetObjIndex);
+
+    int32_t resultId = INSTANCE_NOONE;
+    for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx && resultId == INSTANCE_NOONE; gx++) {
+        for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
+            Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
+            int32_t cellLen = (int32_t) arrlen(cell);
+            repeat(cellLen, ci) {
+                Instance* inst = cell[ci];
+                if (!inst->active) continue;
+                if (notme && inst == self) continue;
+                if (inst->lastCollisionQueryId == query.queryId) continue;
+                inst->lastCollisionQueryId = query.queryId;
+
+                if (query.filterByObject && !VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, targetObjIndex)) continue;
+                if (query.filterByInstanceId && inst->instanceId != (uint32_t) targetObjIndex) continue;
+                if (!query.filterByObject && !query.filterByInstanceId && targetObjIndex != INSTANCE_ALL) continue;
+
+                if (!Collision_circleOverlapsInstance(ctx->dataWin, inst, cx, cy, radius)) continue;
+
+                if (prec != 0) {
+                    Sprite* spr = Collision_getSprite(ctx->dataWin, inst);
+                    if (Collision_hasFrameMasks(spr)) {
+                        InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
+                        GMLReal iLeft   = GMLReal_fmax(qx1, bbox.left);
+                        GMLReal iRight  = GMLReal_fmin(qx2, bbox.right);
+                        GMLReal iTop    = GMLReal_fmax(qy1, bbox.top);
+                        GMLReal iBottom = GMLReal_fmin(qy2, bbox.bottom);
+
+                        bool found = false;
+                        int32_t startX = (int32_t) GMLReal_floor(iLeft);
+                        int32_t endX   = (int32_t) GMLReal_ceil(iRight);
+                        int32_t startY = (int32_t) GMLReal_floor(iTop);
+                        int32_t endY   = (int32_t) GMLReal_ceil(iBottom);
+
+                        for (int32_t py = startY; endY > py && !found; py++) {
+                            for (int32_t px = startX; endX > px && !found; px++) {
+                                GMLReal wpx = (GMLReal) px + 0.5;
+                                GMLReal wpy = (GMLReal) py + 0.5;
+                                GMLReal ddx = wpx - cx;
+                                GMLReal ddy = wpy - cy;
+                                if (ddx * ddx + ddy * ddy > radiusSq) continue;
+                                if (Collision_pointInInstance(spr, inst, wpx, wpy)) {
+                                    found = true;
+                                }
+                            }
+                        }
+                        if (!found) continue;
+                    }
+                }
+
+                resultId = inst->instanceId;
+                break;
+            }
+        }
+    }
+
+    return RValue_makeReal((GMLReal) resultId);
+}
+
+// collision_rectangle_list(x1, y1, x2, y2, obj, prec, notme, list, ordered) -> count
+static RValue builtinCollisionRectangleList(VMContext* ctx, RValue* args, int32_t argCount) {
+    if (8 > argCount) return RValue_makeReal(0.0);
+
+    Runner* runner = (Runner*) ctx->runner;
+    GMLReal x1 = RValue_toReal(args[0]);
+    GMLReal y1 = RValue_toReal(args[1]);
+    GMLReal x2 = RValue_toReal(args[2]);
+    GMLReal y2 = RValue_toReal(args[3]);
+    int32_t target = RValue_toInt32(args[4]);
+    int32_t prec = RValue_toInt32(args[5]);
+    int32_t notme = RValue_toInt32(args[6]);
+    int32_t listId = RValue_toInt32(args[7]);
+    // arg 8 (ordered) is currently ignored; instances are appended in iteration order
+
+    DsList* list = dsListGet(runner, listId);
+    if (list == nullptr) return RValue_makeReal(0.0);
+
+    if (x1 > x2) { GMLReal tmp = x1; x1 = x2; x2 = tmp; }
+    if (y1 > y2) { GMLReal tmp = y1; y1 = y2; y2 = tmp; }
+
+    Instance* self = (Instance*) ctx->currentInstance;
+    int32_t count = 0;
+
+    SpatialGrid_syncGrid(runner, runner->spatialGrid);
+    SpatialGridQuery query = SpatialGrid_prepareQuery(runner, x1, y1, x2, y2, target);
+
+    for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx; gx++) {
+        for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy; gy++) {
+            Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
+            int32_t cellLen = (int32_t) arrlen(cell);
+            repeat(cellLen, ci) {
+                Instance* inst = cell[ci];
+                if (!inst->active) continue;
+                if (notme && inst == self) continue;
+                if (inst->lastCollisionQueryId == query.queryId) continue;
+                inst->lastCollisionQueryId = query.queryId;
+
+                if (query.filterByObject && !VM_isObjectOrDescendant(ctx->dataWin, inst->objectIndex, target)) continue;
+                if (query.filterByInstanceId && inst->instanceId != (uint32_t) target) continue;
+
+                if (!Collision_rectOverlapsInstance(ctx->dataWin, inst, x1, y1, x2, y2)) continue;
+                InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
+
+                if (prec != 0) {
+                    Sprite* spr = Collision_getSprite(ctx->dataWin, inst);
+                    if (Collision_hasFrameMasks(spr)) {
+                        GMLReal iLeft   = GMLReal_fmax(x1, bbox.left);
+                        GMLReal iRight  = GMLReal_fmin(x2, bbox.right);
+                        GMLReal iTop    = GMLReal_fmax(y1, bbox.top);
+                        GMLReal iBottom = GMLReal_fmin(y2, bbox.bottom);
+
+                        bool found = false;
+                        int32_t startX = (int32_t) GMLReal_floor(iLeft);
+                        int32_t endX   = (int32_t) GMLReal_ceil(iRight);
+                        int32_t startY = (int32_t) GMLReal_floor(iTop);
+                        int32_t endY   = (int32_t) GMLReal_ceil(iBottom);
+
+                        for (int32_t py = startY; endY > py && !found; py++) {
+                            for (int32_t px = startX; endX > px && !found; px++) {
+                                if (Collision_pointInInstance(spr, inst, (GMLReal) px + 0.5, (GMLReal) py + 0.5)) {
+                                    found = true;
+                                }
+                            }
+                        }
+                        if (!found) continue;
+                    }
+                }
+
+                arrput(list->items, RValue_makeReal((GMLReal) inst->instanceId));
+                count++;
+            }
+        }
+    }
+
+    return RValue_makeReal((GMLReal) count);
+}
+
 // collision_point(x, y, obj, prec, notme)
 static RValue builtinCollisionPoint(VMContext* ctx, RValue* args, int32_t argCount) {
     if (5 > argCount) return RValue_makeReal((GMLReal) INSTANCE_NOONE);
@@ -6248,13 +6498,8 @@ static RValue builtinCollisionPoint(VMContext* ctx, RValue* args, int32_t argCou
         if (!inst->active) continue;
         if (notme && inst == self) continue;
 
-        InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
-        if (!bbox.valid) continue;
+        if (!Collision_pointInsideInstanceBox(ctx->dataWin, inst, px, py)) continue;
 
-        // Point-in-AABB test
-        if (bbox.left > px || px >= bbox.right || bbox.top > py || py >= bbox.bottom) continue;
-
-        // Precise check if requested
         if (prec != 0) {
             Sprite* spr = Collision_getSprite(ctx->dataWin, inst);
             if (Collision_hasFrameMasks(spr)) {
@@ -6293,28 +6538,25 @@ static RValue builtinInstancePlace(VMContext* ctx, RValue* args, int32_t argCoun
     SpatialGrid_syncGrid(runner, runner->spatialGrid);
 
     if (callerBBox.valid) {
-        SpatialGridRange callerRange = SpatialGrid_computeCellRange(runner->spatialGrid, callerBBox.left, callerBBox.top, callerBBox.right, callerBBox.bottom);
-        bool filterByObject = targetObjIndex >= 0 && 100000 > targetObjIndex;
-        bool filterByInstanceId = targetObjIndex >= 100000;
-        uint32_t queryId = ++runner->collisionQueryCounter;
+        SpatialGridQuery query = SpatialGrid_prepareQuery(runner, callerBBox.left, callerBBox.top, callerBBox.right, callerBBox.bottom, targetObjIndex);
 
-        for (int32_t gx = callerRange.minGridX; callerRange.maxGridX >= gx && resultId == INSTANCE_NOONE; gx++) {
-            for (int32_t gy = callerRange.minGridY; callerRange.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
+        for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx && resultId == INSTANCE_NOONE; gx++) {
+            for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy && resultId == INSTANCE_NOONE; gy++) {
                 Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
                 int32_t cellLen = (int32_t) arrlen(cell);
                 repeat(cellLen, ci) {
                     Instance* other = cell[ci];
                     if (!other->active || other == caller) continue;
-                    if (other->lastCollisionQueryId == queryId) continue;
-                    other->lastCollisionQueryId = queryId;
+                    if (other->lastCollisionQueryId == query.queryId) continue;
+                    other->lastCollisionQueryId = query.queryId;
 
-                    if (filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, targetObjIndex)) continue;
-                    if (filterByInstanceId && other->instanceId != (uint32_t) targetObjIndex) continue;
+                    if (query.filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, targetObjIndex)) continue;
+                    if (query.filterByInstanceId && other->instanceId != (uint32_t) targetObjIndex) continue;
 
                     InstanceBBox otherBBox = Collision_computeBBox(runner->dataWin, other);
                     if (!otherBBox.valid) continue;
 
-                    if (Collision_instancesOverlapPrecise(runner->dataWin, caller, other, callerBBox, otherBBox)) {
+                    if (Collision_instancesOverlapPrecise(runner->dataWin, runner->collisionCompatibilityMode, caller, other, callerBBox, otherBBox)) {
                         resultId = other->instanceId;
                         break;
                     }
@@ -6344,11 +6586,7 @@ static RValue builtinInstancePosition(VMContext* ctx, RValue* args, int32_t argC
         Instance* inst = runner->instanceSnapshots[i];
         if (!inst->active) continue;
 
-        InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, inst);
-        if (!bbox.valid) continue;
-
-        // Point-in-AABB test (no precise, no notme)
-        if (bbox.left > px || px >= bbox.right || bbox.top > py || py >= bbox.bottom) continue;
+        if (!Collision_pointInsideInstanceBox(ctx->dataWin, inst, px, py)) continue;
 
         resultId = inst->instanceId;
         break;
@@ -6367,33 +6605,26 @@ static RValue builtinPositionMeeting(VMContext* ctx, RValue* args, int32_t argCo
     GMLReal py = RValue_toReal(args[1]);
     int32_t target = RValue_toInt32(args[2]);
 
-    bool found = false;
-    bool filterByObject = target >= 0 && 100000 > target;
-    bool filterByInstanceId = target >= 100000;
 
     SpatialGrid_syncGrid(runner, runner->spatialGrid);
+    SpatialGridQuery query = SpatialGrid_prepareQuery(runner, px, py, px, py, target);
+    bool found = false;
 
-    SpatialGridRange range = SpatialGrid_computeCellRange(runner->spatialGrid, px, py, px, py);
-    uint32_t queryId = ++runner->collisionQueryCounter;
-
-    for (int32_t gx = range.minGridX; range.maxGridX >= gx && !found; gx++) {
-        for (int32_t gy = range.minGridY; range.maxGridY >= gy && !found; gy++) {
+    for (int32_t gx = query.range.minGridX; query.range.maxGridX >= gx && !found; gx++) {
+        for (int32_t gy = query.range.minGridY; query.range.maxGridY >= gy && !found; gy++) {
             Instance** cell = runner->spatialGrid->grid[SpatialGrid_cellIndex(runner->spatialGrid, gx, gy)];
             int32_t cellLen = (int32_t) arrlen(cell);
             repeat(cellLen, ci) {
                 Instance* other = cell[ci];
                 // Keep in mind that we DO NOT skip "self"
                 if (!other->active) continue;
-                if (other->lastCollisionQueryId == queryId) continue;
-                other->lastCollisionQueryId = queryId;
+                if (other->lastCollisionQueryId == query.queryId) continue;
+                other->lastCollisionQueryId = query.queryId;
 
-                if (filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, target)) continue;
-                if (filterByInstanceId && other->instanceId != (uint32_t) target) continue;
+                if (query.filterByObject && !VM_isObjectOrDescendant(runner->dataWin, other->objectIndex, target)) continue;
+                if (query.filterByInstanceId && other->instanceId != (uint32_t) target) continue;
 
-                InstanceBBox bbox = Collision_computeBBox(ctx->dataWin, other);
-                if (!bbox.valid) continue;
-
-                if (bbox.left > px || px >= bbox.right || bbox.top > py || py >= bbox.bottom) continue;
+                if (!Collision_pointInsideInstanceBox(ctx->dataWin, other, px, py)) continue;
 
                 found = true;
                 break;
@@ -7440,133 +7671,191 @@ static RValue builtinMpGridDraw(MAYBE_UNUSED VMContext* ctx, MAYBE_UNUSED RValue
 static RValue builtinMpGridPath(VMContext* ctx, RValue* args, int32_t argCount) {
     if (7 > argCount) return RValue_makeBool(false);
     Runner* runner = (Runner*) ctx->runner;
-    MpGrid* g = mpGridGet(runner, RValue_toInt32(args[0]));
-    if (g == nullptr) return RValue_makeBool(false);
+    MpGrid* mp = mpGridGet(runner, RValue_toInt32(args[0]));
+    if (mp == nullptr) return RValue_makeBool(false);
     int32_t pathIdx = RValue_toInt32(args[1]);
     if (0 > pathIdx || (uint32_t) pathIdx >= runner->dataWin->path.count) return RValue_makeBool(false);
-    GamePath* outPath = &runner->dataWin->path.paths[pathIdx];
+    GamePath* pPath = &runner->dataWin->path.paths[pathIdx];
 
-    GMLReal xs = RValue_toReal(args[2]);
-    GMLReal ys = RValue_toReal(args[3]);
-    GMLReal xg = RValue_toReal(args[4]);
-    GMLReal yg = RValue_toReal(args[5]);
-    bool allowDiag = RValue_toBool(args[6]);
+    GMLReal xstart = RValue_toReal(args[2]);
+    GMLReal ystart = RValue_toReal(args[3]);
+    GMLReal xgoal  = RValue_toReal(args[4]);
+    GMLReal ygoal  = RValue_toReal(args[5]);
+    bool allowdiag = RValue_toBool(args[6]);
 
-    int32_t sx = (int32_t) GMLReal_floor((xs - g->left) / g->cellWidth);
-    int32_t sy = (int32_t) GMLReal_floor((ys - g->top) / g->cellHeight);
-    int32_t gx = (int32_t) GMLReal_floor((xg - g->left) / g->cellWidth);
-    int32_t gy = (int32_t) GMLReal_floor((yg - g->top) / g->cellHeight);
+    // Find the start & goal cells & check them.
+    int32_t cxs = (int32_t) GMLReal_floor((xstart - mp->left) / mp->cellWidth);
+    int32_t cys = (int32_t) GMLReal_floor((ystart - mp->top)  / mp->cellHeight);
+    int32_t cxg = (int32_t) GMLReal_floor((xgoal  - mp->left) / mp->cellWidth);
+    int32_t cyg = (int32_t) GMLReal_floor((ygoal  - mp->top)  / mp->cellHeight);
 
-    if (sx < 0 || sx >= g->hcells || sy < 0 || sy >= g->vcells) return RValue_makeBool(false);
-    if (gx < 0 || gx >= g->hcells || gy < 0 || gy >= g->vcells) return RValue_makeBool(false);
-    if (g->cells[sx * g->vcells + sy]) return RValue_makeBool(false);
-    if (g->cells[gx * g->vcells + gy]) return RValue_makeBool(false);
+    if (cxs < 0 || cxs >= mp->hcells || cys < 0 || cys >= mp->vcells) return RValue_makeBool(false);
+    if (cxg < 0 || cxg >= mp->hcells || cyg < 0 || cyg >= mp->vcells) return RValue_makeBool(false);
+    if (mp->cells[cxs * mp->vcells + cys]) return RValue_makeBool(false);
+    if (mp->cells[cxg * mp->vcells + cyg]) return RValue_makeBool(false);
 
-    int32_t total = g->hcells * g->vcells;
-    int32_t* parent = (int32_t*) malloc(total * sizeof(int32_t));
-    int32_t* queue = (int32_t*) malloc(total * sizeof(int32_t));
-    if (parent == nullptr || queue == nullptr) {
-        free(parent); free(queue);
+    // Start the search.
+    int32_t total = mp->hcells * mp->vcells;
+    int32_t* dist = (int32_t*) malloc(total * sizeof(int32_t));
+    int32_t* qq   = (int32_t*) malloc(total * sizeof(int32_t));
+    if (dist == nullptr || qq == nullptr) {
+        free(dist); free(qq);
         return RValue_makeBool(false);
     }
-    for (int32_t i = 0; total > i; i++) parent[i] = -1;
+    for (int32_t i = 0; total > i; i++) dist[i] = -1;
 
-    int32_t startIdx = sx * g->vcells + sy;
-    int32_t goalIdx = gx * g->vcells + gy;
+    int32_t startIdx = cxs * mp->vcells + cys;
+    int32_t goalIdx  = cxg * mp->vcells + cyg;
     int32_t head = 0, tail = 0;
-    queue[tail++] = startIdx;
-    parent[startIdx] = startIdx;
+    dist[startIdx] = 1;
+    qq[tail++] = startIdx;
 
-    int32_t dx4[4] = { 1, -1, 0, 0 };
-    int32_t dy4[4] = { 0, 0, 1, -1 };
-    int32_t dx8[8] = { 1, -1, 0, 0, 1, 1, -1, -1 };
-    int32_t dy8[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
-    int32_t* dxs = allowDiag ? dx8 : dx4;
-    int32_t* dys = allowDiag ? dy8 : dy4;
-    int32_t dirCount = allowDiag ? 8 : 4;
-
-    bool found = false;
+    bool result = false;
     while (tail > head) {
-        int32_t cur = queue[head++];
-        if (cur == goalIdx) { found = true; break; }
-        int32_t cxx = cur / g->vcells;
-        int32_t cyy = cur % g->vcells;
-        for (int32_t d = 0; dirCount > d; d++) {
-            int32_t nx = cxx + dxs[d];
-            int32_t ny = cyy + dys[d];
-            if (nx < 0 || ny < 0 || nx >= g->hcells || ny >= g->vcells) continue;
-            int32_t nidx = nx * g->vcells + ny;
-            if (parent[nidx] != -1) continue;
-            if (g->cells[nidx]) continue;
-            // For diagonal moves, require both cardinal neighbors to be clear
-            if (allowDiag && d >= 4) {
-                int32_t aIdx = cxx * g->vcells + ny;
-                int32_t bIdx = nx * g->vcells + cyy;
-                if (g->cells[aIdx] || g->cells[bIdx]) continue;
-            }
-            parent[nidx] = cur;
-            queue[tail++] = nidx;
+        int32_t val = qq[head++];
+        int32_t xx = val / mp->vcells;
+        int32_t yy = val % mp->vcells;
+        if (xx == cxg && yy == cyg) {
+            result = true;
+            break;
+        }
+        int32_t d = dist[val] + 1;
+
+        bool f1 = (xx > 0) && (yy < mp->vcells - 1) && (dist[(xx - 1) * mp->vcells + (yy + 1)] == -1) && !mp->cells[(xx - 1) * mp->vcells + (yy + 1)];
+        bool f2 = (yy < mp->vcells - 1) && (dist[xx * mp->vcells + (yy + 1)] == -1) && !mp->cells[xx * mp->vcells + (yy + 1)];
+        bool f3 = (xx < mp->hcells - 1) && (yy < mp->vcells - 1) && (dist[(xx + 1) * mp->vcells + (yy + 1)] == -1) && !mp->cells[(xx + 1) * mp->vcells + (yy + 1)];
+        bool f4 = (xx > 0) && (dist[(xx - 1) * mp->vcells + yy] == -1) && !mp->cells[(xx - 1) * mp->vcells + yy];
+        bool f6 = (xx < mp->hcells - 1) && (dist[(xx + 1) * mp->vcells + yy] == -1) && !mp->cells[(xx + 1) * mp->vcells + yy];
+        bool f7 = (xx > 0) && (yy > 0) && (dist[(xx - 1) * mp->vcells + (yy - 1)] == -1) && !mp->cells[(xx - 1) * mp->vcells + (yy - 1)];
+        bool f8 = (yy > 0) && (dist[xx * mp->vcells + (yy - 1)] == -1) && !mp->cells[xx * mp->vcells + (yy - 1)];
+        bool f9 = (xx < mp->hcells - 1) && (yy > 0) && (dist[(xx + 1) * mp->vcells + (yy - 1)] == -1) && !mp->cells[(xx + 1) * mp->vcells + (yy - 1)];
+
+        // Handle horizontal & vertical moves.
+        if (f4) {
+            dist[(xx - 1) * mp->vcells + yy] = d;
+            qq[tail++] = (xx - 1) * mp->vcells + yy;
+        }
+        if (f6) {
+            dist[(xx + 1) * mp->vcells + yy] = d;
+            qq[tail++] = (xx + 1) * mp->vcells + yy;
+        }
+        if (f8) {
+            dist[xx * mp->vcells + (yy - 1)] = d;
+            qq[tail++] = xx * mp->vcells + (yy - 1);
+        }
+        if (f2) {
+            dist[xx * mp->vcells + (yy + 1)] = d;
+            qq[tail++] = xx * mp->vcells + (yy + 1);
+        }
+        // Handle diagonal moves (require both cardinal neighbors clear, matching HTML5).
+        if (allowdiag && f1 && f2 && f4) {
+            dist[(xx - 1) * mp->vcells + (yy + 1)] = d;
+            qq[tail++] = (xx - 1) * mp->vcells + (yy + 1);
+        }
+        if (allowdiag && f7 && f8 && f4) {
+            dist[(xx - 1) * mp->vcells + (yy - 1)] = d;
+            qq[tail++] = (xx - 1) * mp->vcells + (yy - 1);
+        }
+        if (allowdiag && f3 && f2 && f6) {
+            dist[(xx + 1) * mp->vcells + (yy + 1)] = d;
+            qq[tail++] = (xx + 1) * mp->vcells + (yy + 1);
+        }
+        if (allowdiag && f9 && f8 && f6) {
+            dist[(xx + 1) * mp->vcells + (yy - 1)] = d;
+            qq[tail++] = (xx + 1) * mp->vcells + (yy - 1);
         }
     }
 
-    if (!found) {
-        free(parent); free(queue);
+    if (!result) {
+        free(dist); free(qq);
         return RValue_makeBool(false);
     }
 
-    // Reconstruct path from goal back to start
+    // Compute the path from back to front. At each step, scan neighbors with dist == val-1 in the order LEFT, RIGHT, UP, DOWN, then diagonals
     int32_t chainCap = 16;
     int32_t chainLen = 0;
     int32_t* chain = (int32_t*) malloc(chainCap * sizeof(int32_t));
-    int32_t node = goalIdx;
-    while (true) {
-        if (chainLen >= chainCap) {
-            chainCap *= 2;
-            chain = (int32_t*) realloc(chain, chainCap * sizeof(int32_t));
+    {
+        int32_t xx = cxg;
+        int32_t yy = cyg;
+        chain[chainLen++] = xx * mp->vcells + yy;
+        while (xx != cxs || yy != cys) {
+            if (chainLen >= chainCap) {
+                chainCap *= 2;
+                chain = (int32_t*) realloc(chain, chainCap * sizeof(int32_t));
+            }
+            int32_t val = dist[xx * mp->vcells + yy];
+            bool f1 = (xx > 0) && (yy < mp->vcells - 1) && (dist[(xx - 1) * mp->vcells + (yy + 1)] == val - 1);
+            bool f2 = (yy < mp->vcells - 1) && (dist[xx * mp->vcells + (yy + 1)] == val - 1);
+            bool f3 = (xx < mp->hcells - 1) && (yy < mp->vcells - 1) && (dist[(xx + 1) * mp->vcells + (yy + 1)] == val - 1);
+            bool f4 = (xx > 0) && (dist[(xx - 1) * mp->vcells + yy] == val - 1);
+            bool f6 = (xx < mp->hcells - 1) && (dist[(xx + 1) * mp->vcells + yy] == val - 1);
+            bool f7 = (xx > 0) && (yy > 0) && (dist[(xx - 1) * mp->vcells + (yy - 1)] == val - 1);
+            bool f8 = (yy > 0) && (dist[xx * mp->vcells + (yy - 1)] == val - 1);
+            bool f9 = (xx < mp->hcells - 1) && (yy > 0) && (dist[(xx + 1) * mp->vcells + (yy - 1)] == val - 1);
+
+            // Four directions movement
+            if (f4) { xx = xx - 1; } else if (f6) { xx = xx + 1; } else if (f8) { yy = yy - 1; } else if (f2) { yy = yy + 1; } else if (allowdiag && f1) {
+                xx = xx - 1;
+                yy = yy + 1;
+            } else if (allowdiag && f3) {
+                xx = xx + 1;
+                yy = yy + 1;
+            } else if (allowdiag && f7) {
+                xx = xx - 1;
+                yy = yy - 1;
+            } else if (allowdiag && f9) {
+                xx = xx + 1;
+                yy = yy - 1;
+            } else {
+                // Should be unreachable: BFS reached goal, so a predecessor must exist.
+                free(chain);
+                free(dist);
+                free(qq);
+                return RValue_makeBool(false);
+            }
+            chain[chainLen++] = xx * mp->vcells + yy;
         }
-        chain[chainLen++] = node;
-        if (node == startIdx) break;
-        node = parent[node];
     }
 
-    // Clear old path and add points in forward order
-    free(outPath->points);
-    outPath->points = nullptr;
-    outPath->pointCount = 0;
+    // Build the output path.
+    // We walk "chain" in reverse to emit start-first, with explicit overrides so the endpoints are exactly (xstart, ystart) / (xgoal, ygoal) instead of cell centers.
+    free(pPath->points);
+    pPath->points = nullptr;
+    pPath->pointCount = 0;
 
     // When start cell == goal cell, chain has 1 node but the native runner and GameMaker-HTML5 still emit a 2-point path (start coord + goal coord).
     // Without this, the path length is 0, adaptPath early-returns before advancing pathPosition past 1.0, and the OTHER_END_OF_PATH event never fires.
     int32_t pointCount = (startIdx == goalIdx) ? 2 : chainLen;
-    outPath->points = (PathPoint*) malloc(pointCount * sizeof(PathPoint));
-    outPath->pointCount = (uint32_t) pointCount;
+    pPath->points = (PathPoint*) malloc(pointCount * sizeof(PathPoint));
+    pPath->pointCount = (uint32_t) pointCount;
     for (int32_t i = 0; pointCount > i; i++) {
         float wx, wy;
         if (startIdx == goalIdx) {
-            wx = (float) (i == 0 ? xs : xg);
-            wy = (float) (i == 0 ? ys : yg);
+            wx = (float) (i == 0 ? xstart : xgoal);
+            wy = (float) (i == 0 ? ystart : ygoal);
         } else {
             int32_t idx = chain[chainLen - 1 - i];
-            int32_t cxx = idx / g->vcells;
-            int32_t cyy = idx % g->vcells;
-            wx = (float) (g->left + (cxx + 0.5) * g->cellWidth);
-            wy = (float) (g->top + (cyy + 0.5) * g->cellHeight);
-            // Override endpoints with exact start/goal coords so the instance aligns
-            if (i == 0) { wx = (float) xs; wy = (float) ys; }
-            if (i == chainLen - 1) { wx = (float) xg; wy = (float) yg; }
+            int32_t xx = idx / mp->vcells;
+            int32_t yy = idx % mp->vcells;
+            wx = (float) (mp->left + (xx + 0.5) * mp->cellWidth);
+            wy = (float) (mp->top  + (yy + 0.5) * mp->cellHeight);
+            if (i == 0)              { wx = (float) xstart; wy = (float) ystart; }
+            if (i == chainLen - 1)   { wx = (float) xgoal;  wy = (float) ygoal;  }
         }
-        outPath->points[i].x = wx;
-        outPath->points[i].y = wy;
-        outPath->points[i].speed = 100.0f;
+        pPath->points[i].x = wx;
+        pPath->points[i].y = wy;
+        pPath->points[i].speed = 100.0f;
     }
     free(chain);
-    free(parent);
-    free(queue);
+    free(dist);
+    free(qq);
 
-    free(outPath->internalPoints);
-    outPath->internalPoints = nullptr;
-    outPath->internalPointCount = 0;
-    outPath->length = 0.0;
-    GamePath_computeInternal(outPath);
+    free(pPath->internalPoints);
+    pPath->internalPoints = nullptr;
+    pPath->internalPointCount = 0;
+    pPath->length = 0.0f;
+    GamePath_computeInternal(pPath);
 
     return RValue_makeBool(true);
 }
@@ -7643,7 +7932,7 @@ static RValue builtinPathEnd(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UN
 }
 
 // string_hash_to_newline - converts # to \n in a string
-static RValue builtinStringHashToNewline(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) { 
+static RValue builtinStringHashToNewline(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t argCount) {
     if (1 > argCount) return RValue_makeString("");
     RValue original = args[0]; // This is a copy
 
@@ -8011,6 +8300,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "string_replace", builtinStringReplace);
     VM_registerBuiltin(ctx, "string_replace_all", builtinStringReplaceAll);
     VM_registerBuiltin(ctx, "string_repeat", builtinStringRepeat);
+    VM_registerBuiltin(ctx, "string_format", builtinStringFormat);
     VM_registerBuiltin(ctx, "string_count", builtinStringCount);
     VM_registerBuiltin(ctx, "string_digits", builtinStringDigits);
     VM_registerBuiltin(ctx, "ord", builtinOrd);
@@ -8044,6 +8334,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "clamp", builtinClamp);
     VM_registerBuiltin(ctx, "lerp", builtinLerp);
     VM_registerBuiltin(ctx, "point_distance", builtinPointDistance);
+    VM_registerBuiltin(ctx, "point_in_rectangle", builtinPointInRectangle);
     VM_registerBuiltin(ctx, "point_direction", builtinPointDirection);
     VM_registerBuiltin(ctx, "angle_difference", builtinAngleDifference);
     VM_registerBuiltin(ctx, "distance_to_point", builtinDistanceToPoint);
@@ -8119,9 +8410,11 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 
     // ds_list stubs
     VM_registerBuiltin(ctx, "ds_list_create", builtinDsListCreate);
+    VM_registerBuiltin(ctx, "ds_list_destroy", builtinDsListDestroy);
     VM_registerBuiltin(ctx, "ds_list_add", builtinDsListAdd);
     VM_registerBuiltin(ctx, "ds_list_size", builtinDsListSize);
     VM_registerBuiltin(ctx, "ds_list_find_index", builtinDsListFindIndex);
+    VM_registerBuiltin(ctx, "ds_list_find_value", builtinDsListFindValue);
 
     // Array
     VM_registerBuiltin(ctx, "array_length_1d", builtinArrayLength1d);
@@ -8130,6 +8423,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "array_push", builtinArrayPush);
     VM_registerBuiltin(ctx, "array_resize", builtinArrayResize);
     VM_registerBuiltin(ctx, "array_delete", builtinArrayDelete);
+    VM_registerBuiltin(ctx, "array_insert", builtinArrayInsert);
 
     // Steam stubs
     VM_registerBuiltin(ctx, "steam_initialised", builtin_steam_initialised);
@@ -8315,6 +8609,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_sprite_pos", builtin_drawSpritePos);
     VM_registerBuiltin(ctx, "draw_rectangle", builtin_drawRectangle);
     VM_registerBuiltin(ctx, "draw_rectangle_color", builtin_drawRectangleColor);
+    VM_registerBuiltin(ctx, "draw_rectangle_colour", builtin_drawRectangleColor);
     VM_registerBuiltin(ctx, "draw_healthbar", builtin_drawHealthbar);
     VM_registerBuiltin(ctx, "draw_set_color", builtin_drawSetColor);
     VM_registerBuiltin(ctx, "draw_set_alpha", builtin_drawSetAlpha);
@@ -8404,9 +8699,11 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     // Collision
     VM_registerBuiltin(ctx, "place_meeting", builtinPlaceMeeting);
     VM_registerBuiltin(ctx, "collision_rectangle", builtinCollisionRectangle);
+    VM_registerBuiltin(ctx, "collision_rectangle_list", builtinCollisionRectangleList);
     VM_registerBuiltin(ctx, "rectangle_in_rectangle", builtinRectangleInRectangle);
     VM_registerBuiltin(ctx, "collision_line", builtinCollisionLine);
     VM_registerBuiltin(ctx, "collision_point", builtinCollisionPoint);
+    VM_registerBuiltin(ctx, "collision_circle", builtinCollisionCircle);
     VM_registerBuiltin(ctx, "instance_place", builtinInstancePlace);
     VM_registerBuiltin(ctx, "instance_position", builtinInstancePosition);
     VM_registerBuiltin(ctx, "position_meeting", builtinPositionMeeting);

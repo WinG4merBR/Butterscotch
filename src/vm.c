@@ -1494,19 +1494,29 @@ static void handleAddString(VMContext* ctx, RValue a, RValue b, uint8_t resultTy
         RValue_free(&b);
         stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
     } else {
-        // String + Number: convert both to strings and concatenate (GMS behavior)
-        char* sa = RValue_toString(a);
-        char* sb = RValue_toString(b);
-        size_t lenA = strlen(sa);
-        size_t lenB = strlen(sb);
-        char* result = safeMalloc(lenA + lenB + 1);
-        memcpy(result, sa, lenA);
-        memcpy(result + lenA, sb, lenB + 1);
-        free(sa);
-        free(sb);
+        // For anything else, we'll convert to numbers and then sum
+#ifndef NO_RVALUE_INT64
+        if (a.type == RVALUE_INT64 || b.type == RVALUE_INT64) {
+            int64_t result = (a.type == RVALUE_STRING) ? (int64_t) GMLReal_strtod(a.string, nullptr) : a.int64;
+            result += (b.type == RVALUE_STRING) ? (int64_t) GMLReal_strtod(b.string, nullptr) : b.int64;
+            RValue_free(&a);
+            RValue_free(&b);
+            stackPushTyped(ctx, RValue_makeInt64(result), resultType);
+            return;
+        }
+#endif
+        if (a.type == RVALUE_INT32 || b.type == RVALUE_INT32) {
+            int32_t result = (a.type == RVALUE_STRING) ? (int32_t) GMLReal_strtod(a.string, nullptr) : a.int32;
+            result += (b.type == RVALUE_STRING) ? (int32_t) GMLReal_strtod(b.string, nullptr) : b.int32;
+            RValue_free(&a);
+            RValue_free(&b);
+            stackPushTyped(ctx, RValue_makeInt32(result), resultType);
+            return;
+        }
+        GMLReal result = RValue_toReal(a) + RValue_toReal(b);
         RValue_free(&a);
         RValue_free(&b);
-        stackPushTyped(ctx, RValue_makeOwnedString(result), resultType);
+        stackPushTyped(ctx, RValue_makeReal(result), resultType);
     }
 }
 
@@ -1701,7 +1711,7 @@ static void handleConv(VMContext* ctx, uint8_t srcType, uint8_t dstType, uint8_t
         case 0x5F: result = val; break;
 
         default:
-            fprintf(stderr, "VM: Conv unhandled conversion 0x%02X (src=0x%X dst=0x%X)\n", convKey, srcType, dstType);
+            fprintf(stderr, "VM: [%s] Conv unhandled conversion 0x%02X (src=0x%X dst=0x%X)\n", ctx->currentCodeName, convKey, srcType, dstType);
             result = val;
             break;
     }
@@ -2273,7 +2283,7 @@ static void handlePushEnv(VMContext* ctx, uint32_t instr, uint32_t instrAddr) {
         return;
     }
 
-    fprintf(stderr, "VM: PushEnv with unhandled target %d\n", target);
+    fprintf(stderr, "VM: [%s] PushEnv with unhandled target %d\n", ctx->currentCodeName, target);
     ctx->ip = instrAddr + jumpOffset;
 }
 
@@ -3028,38 +3038,20 @@ static RValue executeLoop(VMContext* ctx) {
             case OP_CMP: {
                 RValue* slotA = &ctx->stack.slots[ctx->stack.top - 2];
                 RValue* slotB = &ctx->stack.slots[ctx->stack.top - 1];
-                uint8_t typeA = slotA->type;
-                uint8_t typeB = slotB->type;
 
-                // Inline numeric fast path
-                bool aNumeric = (typeA == RVALUE_INT32 || typeA == RVALUE_REAL);
-                bool bNumeric = (typeB == RVALUE_INT32 || typeB == RVALUE_REAL);
-                if (aNumeric && bNumeric) {
+                // Inline fast path for INT32/INT32
+                if (slotA->type == RVALUE_INT32 && slotB->type == RVALUE_INT32) {
+                    int32_t a = slotA->int32;
+                    int32_t b = slotB->int32;
                     bool result;
-                    if (typeA == RVALUE_INT32 && typeB == RVALUE_INT32) {
-                        int32_t a = slotA->int32;
-                        int32_t b = slotB->int32;
-                        switch (instrCmpKind(instr)) {
-                            case CMP_LT:  result = b > a;  break;
-                            case CMP_LTE: result = b >= a; break;
-                            case CMP_EQ:  result = a == b; break;
-                            case CMP_NEQ: result = a != b; break;
-                            case CMP_GTE: result = a >= b; break;
-                            case CMP_GT:  result = a > b;  break;
-                            default:      result = false;  break;
-                        }
-                    } else {
-                        GMLReal a = (typeA == RVALUE_REAL) ? slotA->real : (GMLReal) slotA->int32;
-                        GMLReal b = (typeB == RVALUE_REAL) ? slotB->real : (GMLReal) slotB->int32;
-                        switch (instrCmpKind(instr)) {
-                            case CMP_LT:  result = b > a;  break;
-                            case CMP_LTE: result = b >= a; break;
-                            case CMP_EQ:  result = a == b; break;
-                            case CMP_NEQ: result = a != b; break;
-                            case CMP_GTE: result = a >= b; break;
-                            case CMP_GT:  result = a > b;  break;
-                            default:      result = false;  break;
-                        }
+                    switch (instrCmpKind(instr)) {
+                        case CMP_LT:  result = b > a;  break;
+                        case CMP_LTE: result = b >= a; break;
+                        case CMP_EQ:  result = a == b; break;
+                        case CMP_NEQ: result = a != b; break;
+                        case CMP_GTE: result = a >= b; break;
+                        case CMP_GT:  result = a > b;  break;
+                        default:      result = false;  break;
                     }
                     slotA->int32 = result ? 1 : 0;
                     slotA->type = RVALUE_BOOL;
