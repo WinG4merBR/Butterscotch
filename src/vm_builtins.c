@@ -7379,6 +7379,17 @@ static RValue builtinNewGMLArray(VMContext* ctx, RValue* args, int32_t argCount)
     return arr;
 }
 
+// array_create - GMS2 internal function to create a new array.
+// Allocates a fresh GMLArray populated with the argument values.
+static RValue builtinCreateArray(VMContext* ctx, RValue* args, int32_t argCount) {
+    RValue arr = VM_createArray(ctx);
+    RValue fill = (argCount > 1) ? args[1] : RValue_makeUndefined();
+    repeat(RValue_toReal(args[0]), i) {
+        VM_arraySet(ctx, &arr, i, fill);
+    }
+    return arr;
+}
+
 // @@This@@ - GMS2 internal function returning the current instance's ID.
 // Emitted by the GMS2 compiler for expressions like `self` when used as a value.
 static RValue builtinThis(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -8772,6 +8783,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
 
     // GMS2 internal
     VM_registerBuiltin(ctx, "@@NewGMLArray@@", builtinNewGMLArray);
+    VM_registerBuiltin(ctx, "array_create", builtinCreateArray);
     VM_registerBuiltin(ctx, "@@This@@", builtinThis);
     VM_registerBuiltin(ctx, "@@Other@@", builtinOther);
 #if IS_BC17_OR_HIGHER_ENABLED
