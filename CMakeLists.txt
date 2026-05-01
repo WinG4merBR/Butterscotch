@@ -141,6 +141,11 @@ elseif(PLATFORM STREQUAL "ps3")
         add_compile_definitions(ENABLE_VM_GML_PROFILER)
     endif()
 
+    option(I_WANT_MY_GAME_TO_LOOK_LIKE_ASS "Enable TPAG Resolution Halving to improve VRAM Constraints" OFF)
+    if(ENABLE_VM_GML_PROFILER)
+        add_compile_definitions(I_WANT_MY_GAME_TO_LOOK_LIKE_ASS=1)
+    endif()
+
     # Butterscotch VM/interpreter tracing
     option(ENABLE_VM_TRACING "Enable Butterscotch VM/interpreter tracing checks" OFF)
     if(ENABLE_VM_TRACING)
