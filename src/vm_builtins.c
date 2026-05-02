@@ -1,4 +1,5 @@
 #include "vm_builtins.h"
+#include "binary_utils.h"
 #include "instance.h"
 #include "json_reader.h"
 #include "runner.h"
@@ -2418,7 +2419,7 @@ static RValue builtinScriptExecute(VMContext* ctx, RValue* args, int32_t argCoun
         codeId = -1;
 
 #if IS_BC17_OR_HIGHER_ENABLED
-        // In GMS 2 BC17+, "scriptName" in source code is compiled as a FUNC-table index (same as builtinMethod). Resolve funcIdx -> codeIndex via funcMap.
+        // In GMS 2 BC17+, "scriptName" in source code is compiled as a FUNC-table index (same as builtinMethod). Resolve funcIdx -> codeIndex via codeIndexByName.
         if (IS_BC17_OR_HIGHER(ctx) && rawArg >= 0 && ctx->dataWin->func.functionCount > (uint32_t) rawArg) {
             const char* funcName = ctx->dataWin->func.functions[rawArg].name;
             if (funcName != nullptr) {
@@ -5249,6 +5250,37 @@ static RValue builtin_drawSpritePartExt(VMContext* ctx, RValue* args, MAYBE_UNUS
     return RValue_makeUndefined();
 }
 
+static RValue builtin_drawSpriteGeneral(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
+    logSemiStubbedFunction(ctx, "draw_sprite_general");
+    Runner* runner = (Runner*) ctx->runner;
+    if (runner->renderer == nullptr) return RValue_makeUndefined();
+
+    int32_t spriteIndex = RValue_toInt32(args[0]);
+    int32_t subimg = RValue_toInt32(args[1]);
+    int32_t left = RValue_toInt32(args[2]);
+    int32_t top = RValue_toInt32(args[3]);
+    int32_t width = RValue_toInt32(args[4]);
+    int32_t height = RValue_toInt32(args[5]);
+    float x = (float) RValue_toReal(args[6]);
+    float y = (float) RValue_toReal(args[7]);
+    float xscale = (float) RValue_toReal(args[8]);
+    float yscale = (float) RValue_toReal(args[9]);
+    float rot = (float) RValue_toReal(args[10]);
+    uint32_t c1 = (uint32_t) RValue_toInt32(args[11]);
+    uint32_t c2 = (uint32_t) RValue_toInt32(args[12]);
+    uint32_t c3 = (uint32_t) RValue_toInt32(args[13]);
+    uint32_t c4 = (uint32_t) RValue_toInt32(args[14]);
+    float alpha = (float) RValue_toReal(args[15]);
+
+    if (0 > subimg && ctx->currentInstance != nullptr) {
+        subimg = (int32_t) ((Instance*) ctx->currentInstance)->imageIndex;
+    }
+
+    Renderer_drawSpritePartExt(runner->renderer, spriteIndex, subimg, left, top, width, height, x, y, xscale, yscale, rot, x, y, c1, alpha);
+    return RValue_makeUndefined();
+}
+
+
 static RValue builtin_drawSpritePos(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = (Runner*) ctx->runner;
     if (runner->renderer == nullptr) return RValue_makeUndefined();
@@ -7390,6 +7422,17 @@ static RValue builtinNewGMLArray(VMContext* ctx, RValue* args, int32_t argCount)
     return arr;
 }
 
+// array_create - GMS2 internal function to create a new array.
+// Allocates a fresh GMLArray populated with the argument values.
+static RValue builtinArrayCreate(VMContext* ctx, RValue* args, int32_t argCount) {
+    RValue arr = VM_createArray(ctx);
+    RValue fill = (argCount > 1) ? args[1] : RValue_makeUndefined();
+    repeat(RValue_toReal(args[0]), i) {
+        VM_arraySet(ctx, &arr, i, fill);
+    }
+    return arr;
+}
+
 // @@This@@ - GMS2 internal function returning the current instance's ID.
 // Emitted by the GMS2 compiler for expressions like `self` when used as a value.
 static RValue builtinThis(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
@@ -7429,7 +7472,7 @@ static RValue builtinNewGMLObject(VMContext* ctx, RValue* args, int32_t argCount
         codeIndex = args[0].method->codeIndex;
     } else {
         // Raw funcIdx pushed via "Push.i <funcIdx>; Conv.i.v" (no method() wrapper used when no static binding is needed).
-        // Resolve via FUNC chunk name -> funcMap, matching builtinMethod's lookup.
+        // Resolve via FUNC chunk name -> codeIndexByName, matching builtinMethod's lookup.
         int32_t rawArg = RValue_toInt32(args[0]);
         codeIndex = rawArg;
         if (rawArg >= 0 && (uint32_t) rawArg < ctx->dataWin->func.functionCount) {
@@ -8435,6 +8478,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "array_resize", builtinArrayResize);
     VM_registerBuiltin(ctx, "array_delete", builtinArrayDelete);
     VM_registerBuiltin(ctx, "array_insert", builtinArrayInsert);
+    VM_registerBuiltin(ctx, "array_create", builtinArrayCreate);
 
     // Steam stubs
     VM_registerBuiltin(ctx, "steam_initialised", builtin_steam_initialised);
@@ -8617,6 +8661,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "draw_sprite_stretched_ext", builtin_drawSpriteStretchedExt);
     VM_registerBuiltin(ctx, "draw_sprite_part", builtin_drawSpritePart);
     VM_registerBuiltin(ctx, "draw_sprite_part_ext", builtin_drawSpritePartExt);
+    VM_registerBuiltin(ctx, "draw_sprite_general", builtin_drawSpriteGeneral);
     VM_registerBuiltin(ctx, "draw_sprite_pos", builtin_drawSpritePos);
     VM_registerBuiltin(ctx, "draw_rectangle", builtin_drawRectangle);
     VM_registerBuiltin(ctx, "draw_rectangle_color", builtin_drawRectangleColor);
